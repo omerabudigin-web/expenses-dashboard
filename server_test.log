@@ -1,0 +1,6 @@
+[app] connecting to databases …
+[db] connected → MekSoftDb2
+[db] connected → MekSoftDb1
+[db] connected → MekSoftDb3
+[app] expenses-dashboard → http://localhost:3001
+[app] polling every 60s  |  data from 2025-10-01
