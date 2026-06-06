@@ -308,3 +308,5 @@ async function init() {
   State.patch({ activeDb: config.defaultDb });
   SSEClient.start(config.defaultDb);
 }
+
+init();
