@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>تحليل المصروفات التشغيلية</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Segoe UI',Tahoma,Arial,sans-serif;background:#0d1b2a;color:#c8d8e8;font-size:14px;direction:rtl}
@@ -93,6 +95,177 @@ td.num,th.num{text-align:left;font-variant-numeric:tabular-nums}
 .pl-margin-badge{display:inline-block;padding:1px 7px;border-radius:8px;font-size:.72rem;font-weight:600}
 .pl-margin-pos{background:#0d3020;color:#4ada8e}
 .pl-margin-neg{background:#3a1010;color:#da4a4a}
+/* ── Transaction comparison table ─────────────────────────────────────────── */
+.plc-txn-tbl{width:100%;border-collapse:collapse;font-size:.8rem}
+.plc-txn-tbl th{color:#5090b0;font-weight:600;padding:5px 10px;text-align:right;border-bottom:1px solid #1e3040;white-space:nowrap}
+.plc-txn-tbl td{padding:6px 10px;vertical-align:middle;border-bottom:1px solid #0a1e2e;color:#b0c8e0}
+.plc-txn-tbl .txn-grp td{background:#060f18;color:#4a6880;font-size:.71rem;font-weight:600;letter-spacing:.05em;padding:4px 10px}
+.plc-txn-tbl .txn-sub td:first-child{padding-right:28px;color:#527080}
+.plc-txn-tbl .txn-total td{border-top:2px solid #2a4060;border-bottom:none;background:#060f18;font-weight:700;font-size:.85rem}
+.plc-txn-tbl .txn-subtot td{border-top:1px solid #1a3040;border-bottom:1px solid #1a3040;background:#060f18;font-weight:600}
+.plc-txn-tbl .txn-hlrow td{background:rgba(218,154,74,.05)}
+.plc-txn-tbl .txn-dimrow td{opacity:.45}
+.txn-trt{display:block;font-size:.66rem;color:#3a5060;margin-top:2px;font-style:italic;line-height:1.3;direction:ltr;text-align:left}
+/* ── Balance Sheet styles ─────────────────────────────────────────────────── */
+.bs-kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px;margin-bottom:18px}
+@media(max-width:900px){.bs-kpis{grid-template-columns:repeat(2,1fr)}}
+.bs-asof{font-size:.78rem;color:#5a7a9a;margin-bottom:14px}
+.bs-tbl{width:100%;border-collapse:collapse;font-size:.83rem}
+.bs-tbl td{padding:8px 13px;border-bottom:1px solid #0e2540;color:#b0c8e0}
+.bs-tbl .bs-section-hdr td{background:#081828;color:#5baef0;font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;padding-top:14px;padding-bottom:5px;border-bottom:none;font-weight:600}
+.bs-tbl .bs-subsection-hdr td{background:transparent;color:#7090b0;font-size:.78rem;font-weight:500;padding-top:10px;padding-bottom:3px;border-bottom:none;padding-right:16px}
+.bs-tbl .bs-subtotal td{border-top:1px solid #2a4a6a;border-bottom:1px solid #2a4a6a;font-weight:600;color:#c8e0f0}
+.bs-tbl .bs-total td{border-top:2px solid #3a6a9a;border-bottom:2px solid #3a6a9a;font-weight:700;font-size:.92rem;color:#e0f0ff}
+.bs-tbl .bs-gap td{color:#da9a4a;font-style:italic}
+.bs-tbl td.bs-num{text-align:left;font-variant-numeric:tabular-nums;font-family:monospace;white-space:nowrap}
+.bs-tbl .bs-item-name{padding-right:28px;color:#90b8d8}
+.bs-balance-ok{background:#0d2818;border:1px solid #1a5030;border-radius:8px;padding:8px 16px;font-size:.8rem;color:#4ada8e;margin-bottom:16px;text-align:center}
+.bs-balance-off{background:#281818;border:1px solid #502020;border-radius:8px;padding:8px 16px;font-size:.8rem;color:#da9a4a;margin-bottom:16px;text-align:center}
+.bs-monthly-tbl{width:100%;border-collapse:collapse;font-size:.82rem}
+.bs-monthly-tbl th{background:#0a1e30;color:#7090b0;padding:9px 12px;text-align:right;font-weight:500;border-bottom:1px solid #1e3a5f;white-space:nowrap}
+.bs-monthly-tbl td{padding:8px 12px;border-bottom:1px solid #0e2540;color:#b0c8e0}
+.bs-monthly-tbl td.num,.bs-monthly-tbl th.num{text-align:left;font-variant-numeric:tabular-nums}
+.bs-monthly-tbl tr:hover td{background:#0a2030}
+.bs-monthly-tbl tr.bs-mo-active td{background:#0a2a40;color:#e0f0ff}
+/* ── Formal Balance Sheet Statement (قائمة المركز المالي - SOCPA SME) ──────── */
+.bsf-wrap{background:#040f1c;border:1px solid #1a3a5f;border-radius:10px;padding:28px 32px;margin-bottom:18px;max-width:900px;margin-left:auto;margin-right:auto}
+.bsf-header{text-align:center;margin-bottom:22px;padding-bottom:18px;border-bottom:2px solid #1e3a5f}
+.bsf-title{font-size:1.18rem;font-weight:700;color:#e0f0ff;letter-spacing:.02em;margin-bottom:4px}
+.bsf-company{font-size:.98rem;color:#c0d8f0;font-weight:600;margin-bottom:2px}
+.bsf-date{font-size:.85rem;color:#7090b0;margin-bottom:2px}
+.bsf-currency{font-size:.75rem;color:#4a6a8a;margin-top:4px}
+.bsf-tbl{width:100%;border-collapse:collapse;font-size:.83rem;direction:rtl}
+.bsf-tbl th{background:#071828;color:#5a8aaa;padding:9px 14px;font-weight:500;border-bottom:2px solid #1e3a5f;text-align:right}
+.bsf-tbl th.bsf-num{text-align:left;font-variant-numeric:tabular-nums;min-width:120px}
+.bsf-tbl td{padding:7px 14px;border-bottom:1px solid #0b1e30;color:#a0c0d8}
+.bsf-tbl td.bsf-num{text-align:left;font-variant-numeric:tabular-nums;font-family:monospace;white-space:nowrap;color:#c0d8f0}
+.bsf-tbl tr.bsf-section-hdr td{background:linear-gradient(90deg,#071828,#040f1c);color:#5baef0;font-weight:700;font-size:.82rem;padding:11px 14px 5px;border-bottom:none;border-top:2px solid #1e3a5f;letter-spacing:.03em}
+.bsf-tbl tr.bsf-sub-hdr td{color:#7090b0;font-size:.79rem;font-weight:600;padding:9px 14px 4px 14px;border-bottom:none;padding-right:18px;background:transparent}
+.bsf-tbl tr.bsf-item td{padding-right:34px}
+.bsf-tbl tr.bsf-item td.bsf-label{color:#90b0cc}
+.bsf-tbl tr.bsf-subtotal td{border-top:1px solid #2a4a6a;border-bottom:1px solid #2a4a6a;font-weight:600;color:#c8e0f0;background:#060f1a;padding-right:20px}
+.bsf-tbl tr.bsf-total td{border-top:2px solid #3a6a9a;border-bottom:2px solid #3a6a9a;font-weight:800;color:#e0f0ff;background:#050d18;font-size:.9rem}
+.bsf-tbl tr.bsf-grand td{border-top:3px double #5baef0;border-bottom:3px double #5baef0;font-weight:800;color:#fff;background:#040c16;font-size:.95rem}
+.bsf-tbl tr.bsf-spacer td{height:8px;border:none;background:transparent}
+.bsf-tbl td.bsf-pos{color:#4ada8e}
+.bsf-tbl td.bsf-neg{color:#da4a4a}
+.bsf-tbl td.bsf-zero{color:#3a5a7a}
+.bsf-balance-ok{text-align:center;font-size:.77rem;color:#3a9a6a;margin-top:16px;padding-top:12px;border-top:1px solid #0e2030}
+@media print{
+  .tabs,.filters,.bs-kpis,#bs-balance-check,.card:not(.bsf-card),.bsf-card .bsf-toggle-row{display:none!important}
+  .bsf-wrap{border:none;padding:0;background:#fff;color:#000;max-width:100%}
+  .bsf-tbl *{color:#000!important;background:#fff!important}
+  .bsf-tbl tr.bsf-section-hdr td{background:#f0f0f0!important;border-top:1px solid #aaa!important}
+  .bsf-tbl tr.bsf-subtotal td,.bsf-tbl tr.bsf-total td,.bsf-tbl tr.bsf-grand td{background:#e8e8e8!important}
+}
+/* ── Cash Flow styles ─────────────────────────────────────────────────────── */
+.cf-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px}
+@media(max-width:900px){.cf-kpis{grid-template-columns:repeat(2,1fr)}}
+.cf-monthly-tbl{width:100%;border-collapse:collapse;font-size:.82rem}
+.cf-monthly-tbl th{background:#0a1e30;color:#7090b0;padding:9px 12px;text-align:right;font-weight:500;border-bottom:1px solid #1e3a5f;white-space:nowrap}
+.cf-monthly-tbl td{padding:8px 12px;border-bottom:1px solid #0e2540;color:#b0c8e0}
+.cf-monthly-tbl td.num,.cf-monthly-tbl th.num{text-align:left;font-variant-numeric:tabular-nums}
+.cf-monthly-tbl tr:hover td{background:#0a2030}
+.cf-monthly-tbl tr.cf-mo-active td{background:#0a2a40;color:#e0f0ff}
+/* ── Verify badge & modal ─────────────────────────────────────────────────── */
+.verify-btn{display:inline-flex;align-items:center;gap:5px;padding:4px 11px;border-radius:20px;font-size:.73rem;cursor:pointer;border:none;font-family:inherit;white-space:nowrap;transition:all .25s;margin-top:4px}
+.verify-btn.vok   {background:#061e10;color:#4ada8e;border:1px solid #1a5a30}
+.verify-btn.vwarn {background:#1e0e04;color:#da9a4a;border:1px solid #5a3a14;animation:vpulse 2s infinite}
+.verify-btn.verr  {background:#1e0404;color:#da5a5a;border:1px solid #5a1414}
+.verify-btn.vchk  {background:#061428;color:#7090b0;border:1px solid #1e3a5f}
+@keyframes vpulse{0%,100%{box-shadow:0 0 0 0 rgba(218,154,74,.4)}50%{box-shadow:0 0 0 6px rgba(218,154,74,0)}}
+.verify-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:2000;align-items:center;justify-content:center}
+.verify-overlay.open{display:flex}
+.verify-box{background:#0a1828;border:1px solid #1e3a5f;border-radius:12px;padding:24px 28px;width:min(720px,94vw);max-height:82vh;overflow-y:auto;direction:rtl}
+.verify-box h3{color:#e0f0ff;margin-bottom:6px;font-size:1rem}
+.v-meta{font-size:.73rem;color:#506070;margin-bottom:16px}
+.v-ok{text-align:center;padding:36px 0;color:#4ada8e;font-size:.95rem}
+.v-section{color:#5baef0;font-size:.73rem;font-weight:600;padding:8px 0 4px;letter-spacing:.04em;text-transform:uppercase}
+.v-tbl{width:100%;border-collapse:collapse;font-size:.79rem;margin-bottom:16px}
+.v-tbl th{color:#5090b0;padding:4px 8px;text-align:right;font-weight:500;border-bottom:1px solid #1a3050}
+.v-tbl th.num,.v-tbl td.num{text-align:left;font-variant-numeric:tabular-nums;font-family:monospace;direction:ltr}
+.v-tbl td{padding:5px 8px;border-bottom:1px solid #091828;color:#a0c0e0}
+.v-diff-hi{color:#da4a4a}.v-diff-lo{color:#da9a4a}
+/* ── Trial Balance ────────────────────────────────────────────────────────── */
+.tb-controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+.tb-controls label{font-size:.8rem;color:#7090b0;white-space:nowrap}
+.tb-controls input[type=month]{background:#0f2035;border:1px solid #1e3a5f;color:#c8d8e8;padding:6px 10px;border-radius:6px;font-size:.82rem}
+.tb-controls input[type=month]:focus{outline:none;border-color:#3a7abf}
+.tb-tbl{width:100%;border-collapse:collapse;font-size:.81rem}
+.tb-tbl th{background:#0a1e30;color:#7090b0;padding:8px 10px;font-weight:500;border-bottom:1px solid #1e3a5f;white-space:nowrap;text-align:right}
+.tb-tbl th.num,.tb-tbl td.num{text-align:left;font-variant-numeric:tabular-nums;font-family:monospace;white-space:nowrap}
+.tb-tbl td{padding:7px 10px;border-bottom:1px solid #0e2540;color:#b0c8e0}
+.tb-tbl tr:hover td{background:#0a2030}
+.tb-tbl .tb-grp-hdr td{background:#081828;color:#5baef0;font-size:.73rem;font-weight:600;letter-spacing:.04em;border-top:1px solid #1e3a5f;padding:5px 10px}
+.tb-tbl tfoot td{background:#081828;border-top:2px solid #3a6a9a;font-weight:700;color:#c8e8ff;padding:8px 10px}
+.tb-tbl tfoot td.num{font-family:monospace}
+.tb-balance-ok{color:#4ada8e;font-size:.8rem;padding:6px 12px;background:#061a0e;border-radius:6px;border:1px solid #1a4a2a;margin-bottom:12px}
+.tb-balance-fail{color:#e08a4a;font-size:.8rem;padding:6px 12px;background:#1a0e06;border-radius:6px;border:1px solid #4a2a0a;margin-bottom:12px}
+.tb-dr{color:#5baef0}.tb-cr{color:#da7a7a}
+.tb-zero{color:#3a5a7a}
+.tb-row:hover td{background:#0d2840!important;cursor:pointer}
+.tb-row:hover td:first-child span:first-child{color:#7ac8f0}
+.tb-col-grp-hdr{background:#060f18;color:#5a7a9a;font-size:.72rem;font-weight:600;text-align:center;border-bottom:1px solid #2a4a6a;padding:5px 4px}
+@media print{
+  .tabs,.hdr-meta,.db-switch-row,.conn-banner,.tb-controls,.filters,.btn,.search-row{display:none!important}
+  body{background:#fff;color:#000;font-size:10pt}
+  .wrap{padding:0;max-width:none}
+  .card{border:none;padding:0;margin:0}
+  .tb-tbl th{background:#dde4ec;color:#000;border:1px solid #aaa}
+  .tb-tbl td{color:#111;border:1px solid #ccc}
+  .tb-tbl tfoot td{background:#eef2f6;color:#000;border-top:2px solid #666}
+  .tb-dr{color:#0050a0}.tb-cr{color:#a00020}
+}
+/* ── Safety Inventory Tab ─────────────────────────────────────────────────── */
+.si-alert{border-radius:8px;padding:12px 16px;margin-bottom:12px;font-size:.83rem;line-height:1.6}
+.si-alert.crit{background:#2a0000;border:1px solid #8b0000;color:#ff9999}
+.si-alert.warn{background:#1a1400;border:1px solid #6e5000;color:#f0d080}
+.si-alert-title{font-weight:700;font-size:.88rem;margin-bottom:4px}
+.si-tl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}
+.si-tl-card{border-radius:10px;padding:12px 14px;position:relative;overflow:hidden;border:1px solid}
+.si-tl-card.red{background:#1a0808;border-color:#5e1a1a}
+.si-tl-card.yellow{background:#1a1400;border-color:#5e4a0a}
+.si-tl-card.green{background:#081a0c;border-color:#1a5e2a}
+.si-tl-card.critical{background:#2a0000;border-color:#8b0000;animation:si-pulse 1.5s infinite}
+.si-tl-card.dead{background:#1a0a1a;border-color:#4a1a5e}
+@keyframes si-pulse{0%,100%{border-color:#8b0000}50%{border-color:#ff4444}}
+.si-tl-dot{width:9px;height:9px;border-radius:50%;position:absolute;top:12px;left:12px}
+.si-tl-card.red .si-tl-dot{background:#e05050;box-shadow:0 0 7px #e05050}
+.si-tl-card.yellow .si-tl-dot{background:#f5c842;box-shadow:0 0 7px #f5c842}
+.si-tl-card.green .si-tl-dot{background:#4ada8e;box-shadow:0 0 7px #4ada8e}
+.si-tl-card.critical .si-tl-dot{background:#ff3333;box-shadow:0 0 10px #ff3333;animation:si-blink .5s infinite}
+.si-tl-card.dead .si-tl-dot{background:#9b59b6;box-shadow:0 0 7px #9b59b6}
+@keyframes si-blink{0%,100%{opacity:1}50%{opacity:.2}}
+.si-tl-status{font-size:.63rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px;padding-right:14px}
+.si-tl-card.red .si-tl-status,.si-tl-card.red .si-tl-doh{color:#f08080}
+.si-tl-card.yellow .si-tl-status,.si-tl-card.yellow .si-tl-doh{color:#f5c842}
+.si-tl-card.green .si-tl-status,.si-tl-card.green .si-tl-doh{color:#4ada8e}
+.si-tl-card.critical .si-tl-status,.si-tl-card.critical .si-tl-doh{color:#ff6b6b}
+.si-tl-card.dead .si-tl-status,.si-tl-card.dead .si-tl-doh{color:#b06bd4}
+.si-tl-size{font-size:1.35rem;font-weight:800;color:#e0f0ff;line-height:1}
+.si-tl-doh{font-size:.77rem;margin-top:4px;font-weight:600}
+.si-tl-sub{font-size:.67rem;color:#5a7090;margin-top:3px}
+.si-tl-val{font-size:.69rem;color:#7a98b8;margin-top:5px}
+.si-sbadge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:.7rem;font-weight:600;white-space:nowrap}
+.si-sbadge.critical{background:#3d0000;color:#ff6b6b;border:1px solid #8b0000}
+.si-sbadge.red{background:#3d1010;color:#f08080;border:1px solid #5e2020}
+.si-sbadge.yellow{background:#3d3000;color:#f5c842;border:1px solid #6e5000}
+.si-sbadge.green{background:#0d2d15;color:#4ada8e;border:1px solid #1a5e2a}
+.si-sbadge.dead{background:#2d1a3d;color:#c07de8;border:1px solid #5a2a7e}
+.si-rec-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+.si-rec-card{border-radius:8px;padding:14px 16px;border:1px solid;margin-bottom:0}
+.si-rec-card.buy{background:#081a0c;border-color:#1a5e2a}
+.si-rec-card.liquidate{background:#1a0808;border-color:#5e1a1a}
+.si-rec-card.hold{background:#0a1828;border-color:#1a3a5f}
+.si-rec-action{font-size:.74rem;font-weight:700;margin-bottom:5px}
+.si-rec-item{font-size:.9rem;font-weight:700;color:#e0f0ff;margin-bottom:5px}
+.si-rec-why{font-size:.77rem;color:#8aa8cc;line-height:1.5;margin-bottom:5px}
+.si-rec-num{font-size:.77rem;font-weight:600;color:#a0c8e0;border-top:1px solid rgba(255,255,255,.06);padding-top:6px;margin-top:4px}
+.si-hm-cell{display:inline-block;width:62px;text-align:center;padding:3px 0;border-radius:4px;font-size:.72rem;font-weight:600}
+.si-fn{font-size:.72rem;color:#4a6a8a;margin-top:10px;line-height:1.5}
+.si-header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:20px;padding:14px 18px;background:#061828;border:1px solid #1e3a5f;border-radius:10px}
+.si-header h3{font-size:1rem;font-weight:700;color:#e0f0ff}
+.si-header .sub{font-size:.75rem;color:#5a7a9a;margin-top:3px}
 </style>
 </head>
 <body>
@@ -111,6 +284,18 @@ td.num,th.num{text-align:left;font-variant-numeric:tabular-nums}
       <span id="db-status" class="db-dot"></span>
     </div>
     <div>البيانات مباشرة <strong>مُحدَّثة كل دقيقة</strong></div>
+    <button id="verify-btn" class="verify-btn vchk" title="فحص التطابق مع ERP">⟳ جارٍ الفحص…</button>
+  </div>
+</div>
+
+<div id="verify-overlay" class="verify-overlay">
+  <div class="verify-box">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+      <h3>فحص التطابق مع ERP</h3>
+      <button id="verify-close" style="background:none;border:none;color:#506070;font-size:1.1rem;cursor:pointer;padding:4px 8px">✕</button>
+    </div>
+    <div id="verify-meta" class="v-meta"></div>
+    <div id="verify-body"></div>
   </div>
 </div>
 
@@ -123,6 +308,21 @@ td.num,th.num{text-align:left;font-variant-numeric:tabular-nums}
   <div class="tab" data-tab="details">تفاصيل القيود</div>
   <div class="tab" data-tab="compare">المقارنة</div>
   <div class="tab" data-tab="pl">قائمة الدخل</div>
+  <div class="tab" data-tab="bs">المركز المالي</div>
+  <div class="tab" data-tab="cf">التدفقات النقدية</div>
+  <div class="tab" data-tab="ratios">النسب المالية</div>
+  <div class="tab" data-tab="notes">الإيضاحات والتوجيهات</div>
+  <div class="tab" data-tab="cfo">لوحة المدير التنفيذي</div>
+  <div class="tab" data-tab="consolidated">مجمعة ★</div>
+  <div class="tab" data-tab="cons-cf">تدفقات مجمعة ★</div>
+  <div class="tab" data-tab="pl-comp">مقارنة الجرد ⚖</div>
+  <div class="tab" data-tab="trial">ميزان المراجعة</div>
+  <div class="tab" data-tab="is">الدخل الشامل ✦</div>
+  <div class="tab" data-tab="safety">مستلزمات السلامة 📦</div>
+  <div class="tab" data-tab="finmodel">النموذج المالي 📊</div>
+  <div class="tab" data-tab="inventory">تحليل المخزون 🔄</div>
+  <div class="tab" data-tab="manufacturing">التصنيع 🏭</div>
+  <div class="tab" data-tab="coils">الكويلات 🔩</div>
 </div>
 
 <div id="tab-summary" class="wrap">
@@ -152,6 +352,8 @@ td.num,th.num{text-align:left;font-variant-numeric:tabular-nums}
 
 <div id="tab-monthly" class="wrap hidden">
   <div class="filters">
+    <label>الفترة:</label>
+    <select id="mo-period-sel"><option value="all">كل الفترة</option></select>
     <label>عرض:</label>
     <select id="mo-cat-sel">
       <option value="all">جميع الفئات</option>
@@ -188,6 +390,10 @@ td.num,th.num{text-align:left;font-variant-numeric:tabular-nums}
 </div>
 
 <div id="tab-accounts" class="wrap hidden">
+  <div class="filters" style="margin-bottom:18px">
+    <label>الفترة:</label>
+    <select id="acc-period-sel"><option value="all">كل الفترة</option></select>
+  </div>
   <div class="grid2">
     <div class="card"><div class="card-title">🥧 توزيع المصروفات حسب الحساب</div><div class="chart-wrap"><canvas id="chart-acc-pie"></canvas></div></div>
     <div class="card"><div class="card-title">📊 أعلى الحسابات إنفاقاً</div><div id="acc-bars"></div></div>
@@ -201,19 +407,34 @@ td.num,th.num{text-align:left;font-variant-numeric:tabular-nums}
 </div>
 
 <div id="tab-branches" class="wrap hidden">
+  <div class="filters">
+    <select id="br-period-sel"><option value="all">جميع الفترات</option></select>
+  </div>
   <div class="grid2">
     <div class="card"><div class="card-title">📊 مصروفات الفروع شهرياً</div><div class="chart-wrap"><canvas id="chart-br-bar"></canvas></div></div>
     <div class="card"><div class="card-title">🥧 حصة كل فرع</div><div class="chart-wrap"><canvas id="chart-br-pie"></canvas></div></div>
   </div>
-  <div class="card"><div class="card-title">📋 تفاصيل الفروع</div>
+  <div class="card"><div class="card-title">📋 إجمالي مصروفات الفروع</div>
     <div class="tbl-wrap"><table>
       <thead><tr><th>الفرع</th><th class="num">الإجمالي</th></tr></thead>
       <tbody id="br-tbody"></tbody>
     </table></div>
   </div>
+  <div class="card"><div class="card-title">🔍 تفصيل المصروفات حسب الفرع والفئة</div>
+    <div class="tbl-wrap"><table id="br-cat-table">
+      <thead id="br-cat-thead"></thead>
+      <tbody id="br-cat-tbody"></tbody>
+    </table></div>
+  </div>
+  <div class="card"><div class="card-title">📈 توزيع الفئات لكل فرع</div>
+    <div id="br-cat-charts" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;padding:4px"></div>
+  </div>
 </div>
 
 <div id="tab-assets" class="wrap hidden">
+  <div class="filters">
+    <select id="asset-period-sel"><option value="all">جميع الفترات</option></select>
+  </div>
   <div class="card"><div class="card-title">🚗 المركبات والأصول المرتبطة بمصروفات</div>
     <div class="tbl-wrap"><table>
       <thead><tr><th>الأصل / المركبة</th><th class="num">صيانة (ر.س)</th><th class="num">محروقات (ر.س)</th><th class="num">مصروفات أخرى (ر.س)</th><th class="num">الإجمالي (ر.س)</th><th class="num">عدد القيود</th></tr></thead>
@@ -269,6 +490,10 @@ td.num,th.num{text-align:left;font-variant-numeric:tabular-nums}
 </div>
 
 <div id="tab-compare" class="wrap hidden">
+  <div class="filters" style="margin-bottom:18px">
+    <label>الفترة:</label>
+    <select id="cmp-period-sel"><option value="all">كل الفترة</option></select>
+  </div>
   <div class="grid2">
     <div class="card"><div class="card-title">📊 مقارنة الفئات عبر الأشهر</div><div class="chart-wrap-lg"><canvas id="chart-compare"></canvas></div></div>
     <div class="card"><div class="card-title">📋 نمو المصروفات شهراً بشهر</div>
@@ -286,11 +511,39 @@ td.num,th.num{text-align:left;font-variant-numeric:tabular-nums}
   </div>
 </div>
 
-<div id="tab-pl" class="wrap hidden">
-  <div class="filters" style="margin-bottom:18px">
-    <label>الفترة:</label>
-    <select id="pl-period-sel"><option value="all">كل الفترة</option></select>
+<div class="grid2" style="margin-top:20px">
+  <div class="card">
+    <div class="card-title">📅 مقارنة سنوية — الإجمالي الشهري</div>
+    <div class="tbl-wrap">
+      <table style="width:100%;border-collapse:collapse;font-size:.82rem">
+        <thead id="yoy-thead"></thead>
+        <tbody id="yoy-tbody"></tbody>
+      </table>
+    </div>
   </div>
+  <div class="card">
+    <div class="card-title">📊 مقارنة سنوية — حسب الفئة</div>
+    <div class="tbl-wrap">
+      <table style="width:100%;border-collapse:collapse;font-size:.82rem">
+        <thead id="yoy-cat-thead"></thead>
+        <tbody id="yoy-cat-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div id="tab-pl" class="wrap hidden">
+  <div class="filters" style="margin-bottom:18px;flex-wrap:wrap;gap:8px">
+    <label>الفترة:</label>
+    <select id="pl-period-sel" class="sel"><option value="all">كل الفترة</option></select>
+    <span id="pl-period-label" style="font-size:.78rem;color:#7090b0;align-self:center"></span>
+    <button id="pl-excel-btn" class="btn sm">📥 Excel</button>
+    <button id="pl-html-btn"  class="btn sm">📄 HTML</button>
+    <button id="pl-pdf-btn"   class="btn sm">🖨️ PDF</button>
+  </div>
+
+  <!-- Open-month warning -->
+  <div id="pl-open-month-banner"></div>
 
   <!-- KPI row -->
   <div class="pl-kpis" id="pl-kpis"></div>
@@ -325,15 +578,797 @@ td.num,th.num{text-align:left;font-variant-numeric:tabular-nums}
           <th class="num">الإيرادات</th>
           <th class="num">تكلفة المبيعات</th>
           <th class="num">مجمل الربح</th>
-          <th class="num">هامش إجمالي</th>
-          <th class="num">المصروفات التشغيلية</th>
-          <th class="num">صافي الربح / الخسارة</th>
-          <th class="num">هامش صافي</th>
+          <th class="num">ه. إجمالي</th>
+          <th class="num">م. تشغيلية</th>
+          <th class="num">EBIT</th>
+          <th class="num">فوائد</th>
+          <th class="num">صافي الربح</th>
+          <th class="num">ه. صافي</th>
+          <th class="num">MoM Δ%</th>
         </tr></thead>
         <tbody id="pl-monthly-tbody"></tbody>
       </table>
     </div>
   </div>
+</div>
+
+<div id="tab-bs" class="wrap hidden">
+  <div class="filters" style="margin-bottom:18px;flex-wrap:wrap;gap:8px">
+    <label>كما في نهاية:</label>
+    <select id="bs-period-sel"><option value="">آخر فترة</option></select>
+    <label style="margin-right:12px">المقارنة:</label>
+    <select id="bsf-cmp-sel" style="background:#0f2035;border:1px solid #1e3a5f;color:#c8d8e8;padding:6px 10px;border-radius:6px;font-size:.82rem">
+      <option value="prev-month">الشهر السابق</option>
+      <option value="prev-quarter">نهاية الربع السابق</option>
+      <option value="prev-year">نفس الشهر - السنة السابقة</option>
+      <option value="fy-start">بداية السنة المالية</option>
+      <option value="opening">الأرصدة الافتتاحية</option>
+      <option value="none">بدون مقارنة</option>
+    </select>
+    <button id="bsf-print-btn" class="btn sm" style="background:#0d2a3a;color:#70c8e8;border:1px solid #2a5a7a;margin-right:4px">🖨️ PDF</button>
+    <button id="bsf-excel-btn" class="btn sm" style="background:#0a2a0a;color:#70e870;border:1px solid #2a5a2a;margin-right:4px">📥 Excel</button>
+    <button id="bsf-html-btn" class="btn sm" style="background:#1a2a3a;color:#90b8d8;border:1px solid #2a4a6a;margin-right:8px">📄 HTML</button>
+    <button id="bsf-toggle-btn" class="btn sm" style="background:#0d3a2a;color:#70e8a8;border:1px solid #2a7a5a">📊 القائمة الرسمية</button>
+  </div>
+  <div class="bs-asof" id="bs-asof"></div>
+  <div class="bs-kpis" id="bs-kpis"></div>
+  <div id="bs-balance-check"></div>
+  <div id="bs-structure"></div>
+
+  <!-- ── Formal Statement (SOCPA SME قائمة المركز المالي) ────────────────── -->
+  <div id="bsf-stmt-wrap" class="bsf-wrap" style="display:none">
+    <div class="bsf-header">
+      <div class="bsf-title">قائمة المركز المالي</div>
+      <div class="bsf-company" id="bsf-company">—</div>
+      <div class="bsf-date" id="bsf-date"></div>
+      <div class="bsf-currency">المبالغ بالريال السعودي</div>
+    </div>
+    <table class="bsf-tbl">
+      <thead>
+        <tr>
+          <th style="width:55%">البيان</th>
+          <th class="bsf-num" id="bsf-cur-hdr">الفترة الحالية</th>
+          <th class="bsf-num" id="bsf-prv-hdr" style="color:#5a7a9a">الفترة المقارنة</th>
+        </tr>
+      </thead>
+      <tbody id="bsf-body"></tbody>
+    </table>
+    <div class="bsf-balance-ok" id="bsf-balance-note"></div>
+  </div>
+
+  <!-- Trend chart -->
+  <div class="card" id="bs-trend-card">
+    <div class="card-title">📈 تطور المركز المالي شهرياً</div>
+    <div class="chart-wrap"><canvas id="chart-bs-trend"></canvas></div>
+  </div>
+
+  <!-- Balance sheet statement (two columns) -->
+  <div class="grid2" id="bs-twocol">
+    <div class="card">
+      <div class="card-title">🏦 الأصول</div>
+      <div class="tbl-wrap">
+        <table class="bs-tbl"><tbody id="bs-assets-body"></tbody></table>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">📋 الخصوم وحقوق الملكية</div>
+      <div class="tbl-wrap">
+        <table class="bs-tbl"><tbody id="bs-le-body"></tbody></table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Monthly trend table -->
+  <div class="card" id="bs-monthly-card">
+    <div class="card-title">📅 التطور الشهري للمركز المالي</div>
+    <div class="tbl-wrap">
+      <table class="bs-monthly-tbl">
+        <thead><tr>
+          <th>الشهر</th>
+          <th class="num">إجمالي الأصول</th>
+          <th class="num">أصول ثابتة</th>
+          <th class="num">أصول متداولة</th>
+          <th class="num">إجمالي الخصوم</th>
+          <th class="num">رأس المال العامل</th>
+          <th class="num">النسبة الجارية</th>
+          <th class="num">نسبة الاستدانة</th>
+          <th class="num">الأرباح المبقاة</th>
+          <th class="num">ربح / خسارة الشهر</th>
+        </tr></thead>
+        <tbody id="bs-monthly-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div id="tab-cf" class="wrap hidden">
+  <div class="filters" style="margin-bottom:18px">
+    <label>الفترة:</label>
+    <select id="cf-period-sel"><option value="all">كل الفترة</option></select>
+    <label style="margin-right:14px">مقارنة:</label>
+    <select id="cf-cmp-sel">
+      <option value="prev">الفترة السابقة المماثلة</option>
+      <option value="none">بدون مقارنة</option>
+    </select>
+    <button id="cf-excel-btn" class="btn" style="margin-right:auto">⬇ تصدير Excel</button>
+  </div>
+
+  <div class="cf-kpis" id="cf-kpis"></div>
+
+  <div id="cf-flow-bars" style="padding:14px;background:#0d1b2a;border-radius:8px;border:1px solid #1e3a5f;margin-bottom:18px"></div>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="card-title">📋 قائمة التدفقات النقدية (الطريقة غير المباشرة)</div>
+      <div class="tbl-wrap">
+        <table class="pl-stmt"><tbody id="cf-statement-body"></tbody></table>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">📊 التدفقات الشهرية</div>
+      <div class="chart-wrap"><canvas id="chart-cf-trend"></canvas></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📅 التطور الشهري للتدفقات النقدية</div>
+    <div class="tbl-wrap">
+      <table class="cf-monthly-tbl">
+        <thead><tr>
+          <th>الشهر</th>
+          <th class="num">تشغيلية</th>
+          <th class="num">استثمارية</th>
+          <th class="num">تمويلية</th>
+          <th class="num">صافي التغيير</th>
+          <th class="num">رصيد الافتتاح</th>
+          <th class="num">رصيد النقدية</th>
+        </tr></thead>
+        <tbody id="cf-monthly-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div id="tab-ratios" class="wrap hidden">
+  <div class="filters" style="margin-bottom:18px;flex-wrap:wrap;gap:8px">
+    <label>كما في نهاية:</label>
+    <select id="ratios-period-sel" style="background:#0f2035;border:1px solid #1e3a5f;color:#c8d8e8;padding:6px 10px;border-radius:6px;font-size:.82rem"></select>
+    <label>احتساب الربحية:</label>
+    <select id="ratios-pl-mode" style="background:#0f2035;border:1px solid #1e3a5f;color:#c8d8e8;padding:6px 10px;border-radius:6px;font-size:.82rem">
+      <option value="ytd">تراكمي — السنة الجارية</option>
+      <option value="cumul">تراكمي — من بداية البيانات</option>
+      <option value="quarter">الربع الحالي</option>
+      <option value="month">الشهر فقط</option>
+    </select>
+    <button id="ratios-excel-btn" class="btn sm">📥 Excel</button>
+    <button id="ratios-html-btn"  class="btn sm">📄 HTML</button>
+    <button id="ratios-pdf-btn"   class="btn sm">🖨️ PDF</button>
+    <span id="ratios-mode-hint" style="color:#5a7a9a;font-size:.78rem;padding-right:6px"></span>
+  </div>
+
+  <div id="ratios-kpis" style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:16px"></div>
+
+  <div class="card" style="margin-bottom:20px">
+    <div class="card-title">🚨 لوحة الإنذار المبكر</div>
+    <div id="ratios-warnings"></div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="card-title">💧 نسب السيولة</div>
+      <div id="ratios-liquidity"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">📈 نسب الربحية</div>
+      <div id="ratios-profitability"></div>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="card-title">⚖️ نسب الرفع المالي</div>
+      <div id="ratios-leverage"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">⚙️ نسب الكفاءة التشغيلية</div>
+      <div id="ratios-efficiency"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">💹 هيكل التكاليف كنسبة من الإيراد</div>
+    <div id="ratios-cost-struct" style="padding:8px 4px"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📊 اتجاه النسب المالية الرئيسية عبر الشهور</div>
+    <div class="chart-wrap" style="height:280px"><canvas id="chart-ratios-trend"></canvas></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📅 المقارنة الشهرية — جميع النسب</div>
+    <div id="ratios-monthly-table" style="overflow-x:auto;margin-top:4px"></div>
+  </div>
+</div>
+
+<div id="tab-notes" class="wrap hidden">
+  <div class="filters" style="margin-bottom:18px;flex-wrap:wrap;gap:8px">
+    <label>كما في نهاية:</label>
+    <select id="notes-period-sel" style="background:#0f2035;border:1px solid #1e3a5f;color:#c8d8e8;padding:6px 10px;border-radius:6px;font-size:.82rem"></select>
+    <label>فترة الإيضاحات:</label>
+    <select id="notes-pl-mode" style="background:#0f2035;border:1px solid #1e3a5f;color:#c8d8e8;padding:6px 10px;border-radius:6px;font-size:.82rem">
+      <option value="ytd">من بداية السنة الجارية</option>
+      <option value="cumul">من بداية البيانات</option>
+      <option value="quarter">الربع الحالي</option>
+      <option value="month">الشهر فقط</option>
+    </select>
+    <button id="notes-excel-btn" class="btn sm">📥 Excel</button>
+    <button id="notes-html-btn"  class="btn sm">📄 HTML</button>
+    <button id="notes-pdf-btn"   class="btn sm">🖨️ PDF</button>
+    <span id="notes-mode-hint" style="color:#5a7a9a;font-size:.78rem;padding-right:6px"></span>
+  </div>
+
+  <div id="notes-kpis" style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:16px"></div>
+
+  <div class="grid2" style="margin-bottom:18px">
+    <div class="card">
+      <div class="card-title">🎯 التوجيهات المالية ذات الأولوية</div>
+      <div id="notes-recommendations"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">✅ نقاط القوة المالية</div>
+      <div id="notes-strengths"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📋 الإيضاحات المتممة للقوائم المالية</div>
+    <div id="notes-body"></div>
+  </div>
+</div>
+
+<!-- ── CFO Executive Dashboard ─────────────────────────────────────────────── -->
+<div id="tab-cfo" class="wrap hidden">
+  <div class="filters" style="margin-bottom:18px;flex-wrap:wrap;gap:8px">
+    <label>الفترة:</label>
+    <select id="cfo-quick-sel" class="sel">
+      <option value="ytd">السنة الجارية</option>
+      <option value="all">كل الفترات</option>
+      <option value="q">الربع الأخير</option>
+      <option value="h6">آخر 6 أشهر</option>
+      <option value="h3">آخر 3 أشهر</option>
+    </select>
+    <span id="cfo-period-label" style="font-size:.78rem;color:#7090b0;align-self:center"></span>
+    <button id="cfo-excel-btn" class="btn sm">📥 Excel</button>
+    <button id="cfo-html-btn"  class="btn sm">📄 HTML</button>
+    <button id="cfo-pdf-btn"   class="btn sm">🖨️ PDF</button>
+  </div>
+  <div id="cfo-hero" class="kpis" style="margin-bottom:20px"></div>
+  <div class="grid2" style="margin-bottom:18px">
+    <div class="card">
+      <div class="card-title">🏥 درجة الصحة المالية (100 نقطة)</div>
+      <div id="cfo-health" style="padding:4px 0"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">📈 الإيراد والربح — آخر 8 أشهر</div>
+      <div class="chart-wrap"><canvas id="chart-cfo-trend"></canvas></div>
+    </div>
+  </div>
+  <div class="grid2" style="margin-bottom:18px">
+    <div class="card">
+      <div class="card-title">📊 تحليل هيكل المصروفات وتقييم كل بند</div>
+      <div id="cfo-expenses"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">⚙️ مؤشرات الكفاءة ورأس المال العامل</div>
+      <div id="cfo-efficiency"></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">🎯 خطة العمل التنفيذية — توجيهات المدير المالي</div>
+    <div id="cfo-actions"></div>
+  </div>
+</div>
+
+<!-- ── Consolidated (أبعاد + وسام) ───────────────────────────────────────── -->
+<div id="tab-consolidated" class="wrap hidden">
+  <div class="filters" style="margin-bottom:14px;align-items:center">
+    <label>من:</label>
+    <select id="cons-period-from" style="background:#0f2035;border:1px solid #1e3a5f;color:#c8d8e8;padding:6px 10px;border-radius:6px;font-size:.82rem"></select>
+    <label>إلى:</label>
+    <select id="cons-period-to" style="background:#0f2035;border:1px solid #1e3a5f;color:#c8d8e8;padding:6px 10px;border-radius:6px;font-size:.82rem"></select>
+    <button id="cons-refresh-btn" class="btn">↺ تحديث</button>
+    <button id="cons-excel-btn" class="btn sm">📥 Excel</button>
+    <button id="cons-html-btn"  class="btn sm">📄 HTML</button>
+    <button id="cons-pdf-btn"   class="btn sm">🖨️ PDF</button>
+    <div id="cons-badges" style="margin-right:auto;display:flex;flex-wrap:wrap;gap:6px;align-items:center"></div>
+  </div>
+  <div id="cons-elim"></div>
+  <div id="cons-hero" class="kpis" style="margin-bottom:20px"></div>
+  <div class="grid2" style="margin-bottom:18px">
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+        <div class="card-title" style="margin-bottom:0">📊 قائمة الدخل المقارنة</div>
+        <div id="cons-pl-range-label" style="font-size:.75rem;color:#5a7a9a"></div>
+      </div>
+      <div id="cons-pl"></div>
+    </div>
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div class="card-title" style="margin-bottom:0">⚖️ المركز المالي المجمع</div>
+        <div id="cons-bs-asof-label" style="font-size:.75rem;color:#5a7a9a"></div>
+      </div>
+      <div id="cons-bs"></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">📈 مؤشرات الأداء المقارنة بين الشركتين</div>
+    <div id="cons-ratios"></div>
+  </div>
+</div>
+
+<div id="tab-cons-cf" class="wrap hidden">
+  <div class="filters" style="margin-bottom:14px;align-items:center">
+    <label>من:</label>
+    <select id="cons-cf-from" style="background:#0f2035;border:1px solid #1e3a5f;color:#c8d8e8;padding:6px 10px;border-radius:6px;font-size:.82rem"></select>
+    <label>إلى:</label>
+    <select id="cons-cf-to" style="background:#0f2035;border:1px solid #1e3a5f;color:#c8d8e8;padding:6px 10px;border-radius:6px;font-size:.82rem"></select>
+    <button id="cons-cf-refresh-btn" class="btn">↺ تحديث</button>
+    <select id="cons-cf-cmp-sel" style="background:#0f2035;border:1px solid #1e3a5f;color:#c8d8e8;padding:6px 10px;border-radius:6px;font-size:.82rem">
+      <option value="prev">مقارنة الفترة السابقة</option>
+      <option value="none">بدون مقارنة</option>
+    </select>
+    <button id="cons-cf-excel-btn" class="btn sm">📥 Excel</button>
+    <div id="cons-cf-badges" style="margin-right:auto;display:flex;flex-wrap:wrap;gap:6px;align-items:center"></div>
+  </div>
+  <div id="cons-cf-hero" class="kpis" style="margin-bottom:20px"></div>
+  <div class="grid2" style="margin-bottom:18px">
+    <div class="card">
+      <div class="card-title">💧 قائمة التدفقات النقدية المجمعة (الطريقة غير المباشرة)</div>
+      <div class="tbl-wrap"><table class="pl-stmt"><tbody id="cons-cf-stmt"></tbody></table></div>
+    </div>
+    <div class="card">
+      <div class="card-title">📊 مخطط التدفقات</div>
+      <div id="cons-cf-flow-bars" style="padding:8px 0"></div>
+      <div class="chart-wrap" style="margin-top:14px"><canvas id="chart-cons-cf"></canvas></div>
+    </div>
+  </div>
+  <div class="card" style="margin-bottom:18px">
+    <div class="card-title">📅 التطور الشهري للتدفقات النقدية</div>
+    <div class="tbl-wrap">
+      <table style="width:100%;border-collapse:collapse;font-size:.8rem">
+        <thead><tr>
+          <th style="text-align:right;padding:8px 10px;color:#7090b0;border-bottom:1px solid #1e3a5f;background:#081828">الشهر</th>
+          <th class="num" style="padding:8px 10px;color:#4ada8e;border-bottom:1px solid #1e3a5f;background:#081828">تشغيلية</th>
+          <th class="num" style="padding:8px 10px;color:#da9a4a;border-bottom:1px solid #1e3a5f;background:#081828">استثمارية</th>
+          <th class="num" style="padding:8px 10px;color:#7ac8f0;border-bottom:1px solid #1e3a5f;background:#081828">تمويلية</th>
+          <th class="num" style="padding:8px 10px;color:#5baef0;border-bottom:1px solid #1e3a5f;background:#081828">صافي التغيير</th>
+          <th class="num" style="padding:8px 10px;color:#7090b0;border-bottom:1px solid #1e3a5f;background:#081828">رصيد الافتتاح</th>
+          <th class="num" style="padding:8px 10px;color:#c8d8e8;border-bottom:1px solid #1e3a5f;background:#081828">رصيد الاختتام</th>
+        </tr></thead>
+        <tbody id="cons-cf-monthly"></tbody>
+      </table>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">🔍 التحليل المالي والتوجيهات</div>
+    <div id="cons-cf-analysis"></div>
+  </div>
+</div>
+
+<div id="tab-pl-comp" class="wrap hidden">
+  <!-- Filter bar -->
+  <div class="filters" id="plc-filters">
+    <label>الفترة:</label>
+    <select id="plc-mode-sel">
+      <option value="all">كل الفترة</option>
+      <option value="year">سنة</option>
+      <option value="quarter">ربع سنوي</option>
+      <option value="half">نصف سنوي</option>
+      <option value="month">شهر</option>
+      <option value="custom">مخصص</option>
+    </select>
+    <select id="plc-year-sel" title="السنة"></select>
+    <select id="plc-q-sel" style="display:none">
+      <option value="1">الربع الأول</option>
+      <option value="2">الربع الثاني</option>
+      <option value="3">الربع الثالث</option>
+      <option value="4">الربع الرابع</option>
+    </select>
+    <select id="plc-h-sel" style="display:none">
+      <option value="1">النصف الأول</option>
+      <option value="2">النصف الثاني</option>
+    </select>
+    <select id="plc-month-sel" style="display:none"></select>
+    <label id="plc-from-lbl" style="display:none">من:</label>
+    <select id="plc-from-sel" style="display:none"></select>
+    <label id="plc-to-lbl" style="display:none">إلى:</label>
+    <select id="plc-to-sel" style="display:none"></select>
+    <label>الشركة:</label>
+    <select id="plc-db-sel">
+      <option value="MekSoftDb1">أبعاد</option>
+      <option value="MekSoftDb2">وسام</option>
+    </select>
+    <button id="plc-refresh-btn" class="btn sm">تحديث ↺</button>
+    <button id="plc-copy-btn" class="btn sm" style="background:#0a2848">نسخ الملخص</button>
+    <span id="plc-period-label" style="color:#7ac8f0;font-size:.82rem;margin-right:auto;font-weight:600"></span>
+  </div>
+
+  <div id="plc-open-month-banner"></div>
+  <div class="kpis" id="plc-kpis"></div>
+
+  <div style="display:grid;grid-template-columns:1fr 310px;gap:16px;margin-bottom:0">
+    <div class="card">
+      <div class="card-title">قائمة الأرباح والخسائر — الجرد الدوري</div>
+      <div id="plc-statement"></div>
+    </div>
+    <div class="card">
+      <div id="plc-rev-box"></div>
+    </div>
+    <div class="card">
+      <div id="plc-cogs-box"></div>
+    </div>
+  </div>
+
+  <div class="card" id="plc-txn-table"></div>
+
+  <div class="card" id="plc-adj-card" style="display:none">
+    <div class="card-title">تفصيل حركات الجرد الدائم (10302%)</div>
+    <div id="plc-adj-box"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">تكلفة البضاعة المباعة — مقارنة شهرية</div>
+    <div style="position:relative;height:260px"><canvas id="plc-chart"></canvas></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">التفصيل الشهري</div>
+    <div id="plc-monthly-tbl" style="overflow-x:auto"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">الملاحظات التحليلية</div>
+    <div id="plc-obs"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">ملاحظات المحلل</div>
+    <textarea id="plc-notes" rows="4"
+      style="width:100%;box-sizing:border-box;background:#0a1820;border:1px solid #1e3040;border-radius:6px;color:#c0d0e0;padding:10px;font-family:Tajawal,sans-serif;font-size:.9rem;resize:vertical"
+      placeholder="أضف ملاحظاتك هنا — تُحفظ تلقائياً بحسب الفترة المحددة"></textarea>
+  </div>
+</div>
+
+<div id="tab-trial" class="wrap hidden">
+
+  <!-- Controls row -->
+  <div class="tb-controls">
+    <label>فترة:</label>
+    <select id="tb-quick" style="background:#0f2035;border:1px solid #1e3a5f;color:#c8d8e8;padding:6px 10px;border-radius:6px;font-size:.82rem">
+      <option value="">مخصص</option>
+      <option value="2025">سنة 2025 (أكتوبر–ديسمبر)</option>
+      <option value="2026-ytd" selected>سنة 2026 (حتى الآن)</option>
+      <option value="all">كل الفترة (2025–الآن)</option>
+    </select>
+    <label>من:</label>
+    <input type="month" id="tb-from">
+    <label>إلى:</label>
+    <input type="month" id="tb-to">
+
+    <label>المستوى:</label>
+    <select id="tb-level" class="filters" style="background:#0f2035;border:1px solid #1e3a5f;color:#c8d8e8;padding:6px 10px;border-radius:6px;font-size:.82rem">
+      <option value="1">المستوى الأول — أقسام رئيسية</option>
+      <option value="2">المستوى الثاني — مجموعات</option>
+      <option value="3" selected>المستوى الثالث — مجموعات فرعية</option>
+      <option value="4">المستوى الرابع — حسابات تفصيلية</option>
+      <option value="5">المستوى الخامس — كامل التفاصيل</option>
+    </select>
+
+    <label>الفرع:</label>
+    <select id="tb-branch" style="background:#0f2035;border:1px solid #1e3a5f;color:#c8d8e8;padding:6px 10px;border-radius:6px;font-size:.82rem">
+      <option value="0">جميع الفروع</option>
+    </select>
+
+    <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:.82rem;color:#7090b0">
+      <input type="checkbox" id="tb-compare" style="accent-color:#5baef0;cursor:pointer">
+      مقارنة بالعام الماضي
+    </label>
+
+    <button class="btn" id="tb-run">عرض الميزان</button>
+    <button class="btn sm" id="tb-export-excel" style="background:#0a3a1a;color:#80e0a0">تصدير Excel ⬇</button>
+    <button class="btn sm" id="tb-export-html"  style="background:#1a2a3a;color:#80b8e0">تصدير HTML ⬇</button>
+    <button class="btn sm" id="tb-export-csv"   style="background:#1a1a2a;color:#a0a0c0">تصدير CSV</button>
+    <button class="btn sm" id="tb-print"         style="background:#0a2040">طباعة</button>
+
+    <span id="tb-status" style="font-size:.78rem;color:#5a7a9a;margin-right:auto"></span>
+  </div>
+
+  <!-- Search -->
+  <div class="search-row" style="margin-bottom:12px">
+    <input type="text" id="tb-search" placeholder="بحث في اسم أو كود الحساب…" style="max-width:320px">
+    <span id="tb-count" style="font-size:.77rem;color:#5a7a9a;align-self:center"></span>
+  </div>
+
+  <!-- Breadcrumb (drill-down path) -->
+  <div id="tb-breadcrumb" class="hidden" style="
+    display:flex;align-items:center;gap:8px;margin-bottom:10px;
+    background:#061828;border:1px solid #1e3a5f;border-radius:8px;
+    padding:8px 14px;font-size:.83rem;flex-wrap:wrap
+  ">
+    <span style="color:#5a7a9a">عرض حسابات:</span>
+    <span id="tb-bc-path" style="color:#7ac8f0;font-weight:600"></span>
+    <button id="tb-bc-back" class="btn sm" style="margin-right:auto;background:#0a2040;font-size:.75rem">↩ رجوع للكل</button>
+  </div>
+
+  <!-- Balance check + Table -->
+  <div class="card" style="padding:0 0 4px 0">
+    <div style="padding:14px 16px 0">
+      <div id="tb-balance-check"></div>
+    </div>
+    <div class="tbl-wrap">
+      <table class="tb-tbl" id="tb-table">
+        <thead>
+          <tr>
+            <th rowspan="2" style="min-width:110px">كود الحساب</th>
+            <th rowspan="2" style="min-width:200px">اسم الحساب</th>
+            <th colspan="2" class="tb-col-grp-hdr">رصيد أول الفترة</th>
+            <th colspan="2" class="tb-col-grp-hdr">حركة الفترة</th>
+            <th colspan="2" class="tb-col-grp-hdr">رصيد آخر الفترة</th>
+          </tr>
+          <tr>
+            <th class="num tb-dr" style="min-width:110px">مدين</th>
+            <th class="num tb-cr" style="min-width:110px">دائن</th>
+            <th class="num tb-dr" style="min-width:110px">مدين</th>
+            <th class="num tb-cr" style="min-width:110px">دائن</th>
+            <th class="num tb-dr" style="min-width:110px">مدين</th>
+            <th class="num tb-cr" style="min-width:110px">دائن</th>
+          </tr>
+        </thead>
+        <tbody id="tb-tbody">
+          <tr><td colspan="8" style="text-align:center;padding:48px;color:#3a5a7a">
+            اختر الفترة والمستوى والفرع ثم اضغط <strong style="color:#5baef0">عرض الميزان</strong>
+          </td></tr>
+        </tbody>
+        <tfoot id="tb-tfoot"></tfoot>
+      </table>
+    </div>
+    <div id="tb-loading" class="hidden" style="text-align:center;padding:32px;color:#7090b0;font-size:.88rem">
+      جارٍ تحميل ميزان المراجعة…
+    </div>
+  </div>
+
+</div>
+
+<!-- ── INCOME STATEMENT TAB ───────────────────────────────────────────────── -->
+<div id="tab-is" class="wrap hidden">
+
+  <!-- Controls row -->
+  <div class="tb-controls">
+    <label>فترة:</label>
+    <select id="is-quick" style="background:#0f2035;border:1px solid #1e3a5f;color:#c8d8e8;padding:6px 10px;border-radius:6px;font-size:.82rem">
+      <option value="">مخصص</option>
+      <option value="2025">سنة 2025 (أكتوبر–ديسمبر)</option>
+      <option value="2026-ytd">سنة 2026 (حتى الآن)</option>
+      <option value="all" selected>كل الفترة (2025–الآن)</option>
+    </select>
+    <label>من:</label>
+    <input type="month" id="is-from">
+    <label>إلى:</label>
+    <input type="month" id="is-to">
+
+    <span id="is-level-wrap">
+      <label>المستوى:</label>
+      <select id="is-level" style="background:#0f2035;border:1px solid #1e3a5f;color:#c8d8e8;padding:6px 10px;border-radius:6px;font-size:.82rem">
+        <option value="1">المستوى الأول — أقسام رئيسية</option>
+        <option value="2">المستوى الثاني — مجموعات</option>
+        <option value="3" selected>المستوى الثالث — مجموعات فرعية</option>
+        <option value="4">المستوى الرابع — حسابات تفصيلية</option>
+        <option value="5">المستوى الخامس — كامل التفاصيل</option>
+      </select>
+    </span>
+    <button id="is-tree-btn" class="btn sm" title="عرض شجري لجميع المستويات" style="background:#0d2a3a;color:#70c8e8;border:1px solid #2a5a7a">&#9660; شجري</button>
+
+    <label>الفرع:</label>
+    <select id="is-branch" style="background:#0f2035;border:1px solid #1e3a5f;color:#c8d8e8;padding:6px 10px;border-radius:6px;font-size:.82rem">
+      <option value="ALL">جميع الفروع</option>
+    </select>
+
+    <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:.82rem;color:#7090b0">
+      <input type="checkbox" id="is-compare" style="accent-color:#5baef0;cursor:pointer">
+      مقارنة بالعام الماضي
+    </label>
+
+    <button class="btn" id="is-run">عرض القائمة</button>
+    <button class="btn sm" id="is-export-excel" style="background:#0a3a1a;color:#80e0a0">Excel ⬇</button>
+    <button class="btn sm" id="is-export-html"  style="background:#1a2a3a;color:#80b8e0">HTML ⬇</button>
+    <button class="btn sm" id="is-print"         style="background:#0a2040">طباعة</button>
+    <span id="is-status" style="font-size:.78rem;color:#5a7a9a;margin-right:auto"></span>
+  </div>
+
+  <!-- Search + count -->
+  <div class="search-row" style="margin-bottom:12px">
+    <input type="text" id="is-search" placeholder="بحث في اسم أو كود الحساب…" style="max-width:320px">
+    <span id="is-count" style="font-size:.77rem;color:#5a7a9a;align-self:center"></span>
+  </div>
+
+  <!-- Breadcrumb (drill-down) -->
+  <div id="is-breadcrumb" class="hidden" style="
+    display:flex;align-items:center;gap:8px;margin-bottom:10px;
+    background:#061828;border:1px solid #1e3a5f;border-radius:8px;
+    padding:8px 14px;font-size:.83rem;flex-wrap:wrap
+  ">
+    <span style="color:#5a7a9a">عرض حسابات:</span>
+    <span id="is-bc-path" style="color:#7ac8f0;font-weight:600"></span>
+    <button id="is-bc-back" class="btn sm" style="margin-right:auto;background:#0a2040;font-size:.75rem">↩ رجوع للكل</button>
+  </div>
+
+  <!-- Table card -->
+  <div class="card" style="padding:0 0 4px 0">
+    <div style="padding:12px 16px 0;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+      <div style="font-size:.84rem;color:#a0c4e8;font-weight:600">
+        قائمة الدخل الشامل — <span id="is-period-label" style="color:#6adc8e;font-size:.78rem"></span>
+      </div>
+      <div id="is-net-badge" style="font-size:.88rem;font-weight:700;padding:4px 14px;border-radius:20px;display:none"></div>
+    </div>
+    <div class="tbl-wrap">
+      <table class="tb-tbl" id="is-table">
+        <thead>
+          <tr>
+            <th rowspan="2" style="min-width:120px">كود الحساب</th>
+            <th rowspan="2" style="min-width:220px">البيان</th>
+            <th colspan="2" class="tb-col-grp-hdr">نشاط الفترة</th>
+            <th rowspan="2" class="num" style="min-width:130px">الصافي (ر.س)</th>
+          </tr>
+          <tr>
+            <th class="num tb-dr" style="min-width:120px">مدين</th>
+            <th class="num tb-cr" style="min-width:120px">دائن</th>
+          </tr>
+        </thead>
+        <tbody id="is-tbody">
+          <tr><td colspan="5" style="text-align:center;padding:52px;color:#3a5a7a">
+            اختر الفترة والمستوى والفرع ثم اضغط <strong style="color:#5baef0">عرض القائمة</strong>
+          </td></tr>
+        </tbody>
+        <tfoot id="is-tfoot"></tfoot>
+      </table>
+    </div>
+    <div id="is-loading" class="hidden" style="text-align:center;padding:32px;color:#7090b0;font-size:.88rem">
+      جارٍ تحميل قائمة الدخل…
+    </div>
+  </div>
+
+</div>
+
+<!-- ── SAFETY INVENTORY TAB ────────────────────────────────────────────────── -->
+<div id="tab-safety" class="wrap hidden">
+
+  <div class="si-header">
+    <div>
+      <h3>تحليل عمر المخزون ومعدل الدوران — مستلزمات أنظمة السلامة</h3>
+      <div class="sub">ماسورة أسود عماني الجزيرة ضغط 40 · MekSoftDb1 · تحليل بتاريخ 2026-06-01 · الفترة المرجعية: 243 يوماً (أكتوبر 2025 – مايو 2026)</div>
+    </div>
+    <button class="btn" onclick="siExportExcel()" style="background:#0a3a1a;color:#80e0a0">📥 Excel</button>
+  </div>
+
+  <!-- Alerts -->
+  <div class="si-alert crit">
+    <div class="si-alert-title">🚨 تنبيه عاجل — 6 بوصة: نفاد المخزون خلال 5 أيام تقريباً</div>
+    متبقٍ 41 حبة · معدل البيع الحالي 8.3 حبة/يوم · أعلى منتج إيراداً (25.3% من إجمالي المبيعات = 1.39 مليون ر.س) · <strong>أصدر طلب شراء فوري</strong>
+  </div>
+  <div class="si-alert warn">
+    <div class="si-alert-title">⚠️ تحذير — مخزون مفرط: رأس مال مجمّد 1.37 مليون ر.س</div>
+    ماسورة 1" (22 شهراً) + 1.25" (20 شهراً) + 3" (17 شهراً) تحتجز رأس مال ضخم. معدل الدوران السنوي المتوقع أقل من 0.6 دورة.
+  </div>
+  <div class="si-alert warn">
+    <div class="si-alert-title">⚠️ بضاعة راكدة — 0.5" و0.75": لا مبيعات منذ مارس 2026</div>
+    3,635 حبة بوصه 0.75 + 386 حبة بوصه 0.5 متوقفة عن الحركة منذ 64–67 يوماً. قيمة التكلفة المجمّدة: 102,918 ر.س.
+  </div>
+
+  <!-- KPIs -->
+  <div class="kpis" id="si-kpis"></div>
+
+  <!-- Traffic Light -->
+  <div class="card">
+    <div class="card-title">🚦 لوحة المخاطر التنفيذية — حالة كل صنف</div>
+    <div class="si-tl-grid" id="si-tl-grid"></div>
+    <div class="si-fn">🟢 سليم = DOH أقل من 90 يوماً | 🟡 مراقبة = 90–180 يوماً | 🔴 مفرط = 180+ يوماً | 🟣 راكد = لا مبيعات 30+ يوم | 🔴⚡ حرج = نفاد وشيك<br>DOH = أيام الإمداد بالسرعة الحالية (آخر 90 يوم).</div>
+  </div>
+
+  <!-- Charts row 1 -->
+  <div class="grid2">
+    <div class="card">
+      <div class="card-title">💰 قيمة المخزون المجمّد (ر.س) مقابل أيام الإمداد</div>
+      <div class="chart-wrap"><canvas id="si-chart-bubble"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">🔄 معدل الدوران السنوي المتوقع (×/سنة)</div>
+      <div class="chart-wrap"><canvas id="si-chart-turnover"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Heatmap -->
+  <div class="card">
+    <div class="card-title">🌡️ خريطة حرارة — المبيعات الشهرية بالحبة (أكتوبر 2025 – مايو 2026)</div>
+    <div class="tbl-wrap"><table id="si-heatmap"></table></div>
+    <div class="si-fn">اللون الأعمق = أعلى مبيعات · الخلايا الرمادية = صفر مبيعات</div>
+  </div>
+
+  <!-- Aging table -->
+  <div class="card">
+    <div class="card-title">⏳ تفصيل عمر المخزون ومعدل الدوران — تحليل FIFO</div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr>
+          <th>الصنف</th><th class="num">المخزون (حبة)</th><th class="num">قيمة التكلفة (ر.س)</th>
+          <th>أقدم وحدة (FIFO)</th><th class="num">DOH (90 يوم)</th><th class="num">معدل الدوران</th>
+          <th class="num">DSI الكامل</th><th class="num">سرعة/يوم</th><th>توقع النفاد</th><th>الحالة</th>
+        </tr></thead>
+        <tbody id="si-tbody-aging"></tbody>
+        <tfoot id="si-tfoot-aging"></tfoot>
+      </table>
+    </div>
+    <div class="si-fn">FIFO = أقدم وحدة متبقية بحسب منطق أول داخل أول خارج. DOH = Days On Hand. DSI = Days Sales of Inventory. معدل الدوران = كمية مباعة ÷ متوسط المخزون خلال الفترة.</div>
+  </div>
+
+  <!-- Stockout projection -->
+  <div class="card">
+    <div class="card-title">📅 توقعات نفاد المخزون — بالسرعة الحالية (آخر 90 يوم)</div>
+    <div class="chart-wrap" style="height:240px;margin-bottom:16px"><canvas id="si-chart-stockout"></canvas></div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr>
+          <th>الصنف</th><th class="num">المخزون</th><th class="num">معدل/يوم</th>
+          <th class="num">أيام للنفاد</th><th>تاريخ النفاد</th><th>آخر بيع</th><th class="num">هامش الأمان</th><th>قرار</th>
+        </tr></thead>
+        <tbody id="si-tbody-proj"></tbody>
+      </table>
+    </div>
+    <div class="si-fn">* مبني على متوسط 90 يوم. الهامش المقترح لإعادة الطلب: شهران من وقت الاستلام.</div>
+  </div>
+
+  <!-- Charts row 2 -->
+  <div class="grid2">
+    <div class="card">
+      <div class="card-title">📈 اتجاه مبيعات أكثر الأصناف نشاطاً (حبة/شهر)</div>
+      <div class="chart-wrap"><canvas id="si-chart-velocity"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">🏷️ مقارنة هامش البيع ↔ الشراء (ر.س/حبة)</div>
+      <div class="chart-wrap"><canvas id="si-chart-margin"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Recommendations -->
+  <div class="card">
+    <div class="card-title">💡 توصيات المحلل المالي</div>
+    <div class="si-rec-grid" id="si-rec-grid"></div>
+  </div>
+
+  <!-- Financial summary -->
+  <div class="card">
+    <div class="card-title">💵 ملخص المخاطر المالية والكفاءة</div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr>
+          <th>الصنف</th><th class="num">قيمة الشراء (ر.س)</th><th class="num">إيرادات إجمالية (ر.س)</th>
+          <th class="num">مردودات (ر.س)</th><th class="num">صافي الإيرادات (ر.س)</th>
+          <th class="num">هامش الربح</th><th class="num">قيمة مخزون متبقٍ</th><th>نسبة التحصيل</th><th>رأس مال مجمّد</th>
+        </tr></thead>
+        <tbody id="si-tbody-fin"></tbody>
+        <tfoot id="si-tfoot-fin"></tfoot>
+      </table>
+    </div>
+    <div class="si-fn">صافي الإيرادات = الإيرادات الإجمالية (فواتير البيع) − مردودات البيع (SalesReturn). هامش الربح = (صافي الإيرادات − تكلفة مبيع) ÷ صافي الإيرادات. رأس المال المعطّل = قيمة مخزون الأصناف التي معدل دورانها أقل من مرتين سنوياً.</div>
+  </div>
+
+</div>
+
+<div id="tab-finmodel" class="wrap hidden"></div>
+<div id="tab-inventory" class="wrap hidden"></div>
+<div id="tab-manufacturing" class="wrap hidden"></div>
+<div id="tab-coils" class="hidden" style="height:calc(100vh - 110px)">
+  <iframe id="coils-iframe" src="" style="width:100%;height:100%;border:none;display:block;background:#0d1117"></iframe>
 </div>
 
 <script src="/js/constants.js"></script>

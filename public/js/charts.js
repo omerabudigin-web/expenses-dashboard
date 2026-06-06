@@ -240,11 +240,12 @@ function renderPLTrend(plMonths) {
   if (!ctx || !plMonths.length) return;
 
   const computed = plMonths.map(m => {
-    const totalCost    = (m.cogs || 0) + (m.otherCost || 0);
-    const grossProfit  = (m.revenue || 0) - totalCost;
-    const totalOpex    = (m.sal||0)+(m.rent||0)+(m.maint||0)+(m.sell||0)+(m.dist||0)+(m.adm||0)+(m.fin||0)+(m.char||0)+(m.oth||0);
-    const netProfit    = grossProfit - totalOpex;
-    return { label: m.label, revenue: m.revenue, grossProfit, netProfit };
+    const totalCost   = (m.cogs || 0) + (m.otherCost || 0);
+    const grossProfit = (m.revenue || 0) - totalCost;
+    const coreOpex    = (m.sal||0)+(m.rent||0)+(m.maint||0)+(m.sell||0)+(m.dist||0)+(m.adm||0)+(m.char||0)+(m.oth||0);
+    const ebit        = grossProfit - coreOpex;
+    const netProfit   = ebit - (m.fin || 0);
+    return { label: m.label, revenue: m.revenue, grossProfit, ebit, netProfit };
   });
 
   charts['pl-trend'] = new Chart(ctx, {
@@ -256,7 +257,7 @@ function renderPLTrend(plMonths) {
           label:           PL_LABELS.revenue,
           data:            computed.map(m => m.revenue),
           borderColor:     PL_COLORS.revenue,
-          backgroundColor: PL_COLORS.revenue + '22',
+          backgroundColor: PL_COLORS.revenue + '11',
           tension:         0.3,
           borderWidth:     2,
           pointRadius:     3,
@@ -269,6 +270,17 @@ function renderPLTrend(plMonths) {
           backgroundColor: 'transparent',
           tension:         0.3,
           borderWidth:     2,
+          pointRadius:     3,
+          fill:            false,
+        },
+        {
+          label:           'ربح التشغيل (EBIT)',
+          data:            computed.map(m => m.ebit),
+          borderColor:     '#4a9eda',
+          backgroundColor: 'transparent',
+          tension:         0.3,
+          borderWidth:     1.5,
+          borderDash:      [4, 2],
           pointRadius:     3,
           fill:            false,
         },
@@ -294,6 +306,104 @@ function renderPLTrend(plMonths) {
       scales: {
         x: { ...AXIS_STYLE },
         y: { ...AXIS_STYLE, ticks: { ...AXIS_STYLE.ticks, callback: v => fmt(v) } },
+      },
+    },
+  });
+}
+
+// ── Balance Sheet trend: Assets / Liabilities / Equity / Working Capital ──────
+function renderBSTrend(monthlyTotals) {
+  destroyChart('bs-trend');
+  const ctx = document.getElementById('chart-bs-trend');
+  if (!ctx || !monthlyTotals.length) return;
+  charts['bs-trend'] = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: monthlyTotals.map(m => m.label),
+      datasets: [
+        { label: 'إجمالي الأصول',    data: monthlyTotals.map(m => m.assets),          borderColor: '#5baef0', backgroundColor: '#5baef011', tension: 0.3, borderWidth: 2, pointRadius: 3, fill: false },
+        { label: 'إجمالي الخصوم',    data: monthlyTotals.map(m => m.liabs),           borderColor: '#da4a4a', backgroundColor: 'transparent', tension: 0.3, borderWidth: 2, pointRadius: 3, fill: false },
+        { label: 'حقوق الملكية',     data: monthlyTotals.map(m => m.totalEquity),     borderColor: '#4ada8e', backgroundColor: 'transparent', tension: 0.3, borderWidth: 2, pointRadius: 3, borderDash: [5, 3], fill: false },
+        { label: 'رأس المال العامل', data: monthlyTotals.map(m => m.workingCapital),  borderColor: '#da9a4a', backgroundColor: 'transparent', tension: 0.3, borderWidth: 1.5, pointRadius: 3, borderDash: [3, 2], fill: false },
+      ],
+    },
+    options: {
+      ...CHART_OPTS,
+      plugins: {
+        legend: { labels: { color: '#8ba0b8', font: { size: 10 }, boxWidth: 12 } },
+        tooltip: { callbacks: { label: tooltipLabel } },
+      },
+      scales: {
+        x: { ...AXIS_STYLE },
+        y: { ...AXIS_STYLE, ticks: { ...AXIS_STYLE.ticks, callback: v => fmt(v) } },
+      },
+    },
+  });
+}
+
+// ── Bar: Cash Flow by activity type monthly ───────────────────────────────────
+function renderCFTrend(cfMonths) {
+  destroyChart('cf-trend');
+  const ctx = document.getElementById('chart-cf-trend');
+  if (!ctx || !cfMonths.length) return;
+  charts['cf-trend'] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: cfMonths.map(m => m.label),
+      datasets: [
+        { label: 'تشغيلية',    data: cfMonths.map(m => m.operatingCF),  backgroundColor: '#4ada8e99', borderColor: '#4ada8e', borderWidth: 1 },
+        { label: 'استثمارية',  data: cfMonths.map(m => m.investingCF),  backgroundColor: '#da9a4a99', borderColor: '#da9a4a', borderWidth: 1 },
+        { label: 'تمويلية',    data: cfMonths.map(m => m.financingCF),  backgroundColor: '#5baef099', borderColor: '#5baef0', borderWidth: 1 },
+      ],
+    },
+    options: {
+      ...CHART_OPTS,
+      plugins: {
+        legend: { labels: { color: '#8ba0b8', font: { size: 10 }, boxWidth: 12 } },
+        tooltip: { callbacks: { label: tooltipLabel } },
+      },
+      scales: {
+        x: { ...AXIS_STYLE },
+        y: { ...AXIS_STYLE, ticks: { ...AXIS_STYLE.ticks, callback: v => fmt(v) } },
+      },
+    },
+  });
+}
+
+// ── Line: financial ratios trend (dual Y-axis) ───────────────────────────────
+function renderRatiosTrend(ratioArr) {
+  destroyChart('ratios-trend');
+  const ctx = document.getElementById('chart-ratios-trend');
+  if (!ctx || !ratioArr.length) return;
+  const safe = arr => arr.map(v => (v !== null && isFinite(v)) ? +v.toFixed(2) : null);
+  charts['ratios-trend'] = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: ratioArr.map(r => r.label),
+      datasets: [
+        { label:'النسبة الجارية ×',  data: safe(ratioArr.map(r => r.currentRatio)), borderColor:'#4a9eda', backgroundColor:'transparent', yAxisID:'yR', tension:0.3, pointRadius:3 },
+        { label:'النسبة السريعة ×',  data: safe(ratioArr.map(r => r.quickRatio)),   borderColor:'#4ada8e', backgroundColor:'transparent', yAxisID:'yR', tension:0.3, pointRadius:3 },
+        { label:'الدين/الملكية ×',   data: safe(ratioArr.map(r => r.debtEquity)),   borderColor:'#da4a4a', backgroundColor:'transparent', yAxisID:'yR', tension:0.3, pointRadius:3, borderDash:[4,2] },
+        { label:'هامش صافي %',       data: safe(ratioArr.map(r => r.netMargin)),    borderColor:'#da9a4a', backgroundColor:'transparent', yAxisID:'yPct',tension:0.3, pointRadius:3, borderDash:[2,2] },
+      ],
+    },
+    options: {
+      ...CHART_OPTS,
+      plugins: {
+        legend: { labels: { color:'#8ba0b8', font:{ size:10 }, boxWidth:12 } },
+        tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${ctx.raw ?? '—'}` } },
+      },
+      scales: {
+        x: { ...AXIS_STYLE },
+        yR: {
+          ...AXIS_STYLE, position:'right',
+          title: { display:true, text:'× (نسبة)', color:'#5a7a9a', font:{ size:9 } },
+        },
+        yPct: {
+          ...AXIS_STYLE, position:'left',
+          title: { display:true, text:'% (نسبة مئوية)', color:'#5a7a9a', font:{ size:9 } },
+          grid: { drawOnChartArea:false },
+        },
       },
     },
   });

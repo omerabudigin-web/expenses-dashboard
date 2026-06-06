@@ -5,12 +5,11 @@ const { getPool } = require('../db');
 const AR_MONTHS = ['','يناير','فبراير','مارس','أبريل','مايو','يونيو',
                    'يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
 
-// Shared WHERE — excludes revenue/contra accounts, only debit entries since @startDate
+// Shared WHERE — excludes revenue/contra accounts, net (Debit-Credit) per line since @startDate
 const BASE_WHERE = `
   ac.Code LIKE '4%'
   AND ac.Code NOT LIKE '40101010%'
   AND ac.Code NOT LIKE '40101020%'
-  AND jd.Debit > 0
   AND h.TransactionDate >= @startDate
 `;
 
@@ -54,6 +53,16 @@ async function getCompanyName(dbName) {
   return (res.recordset[0] && (res.recordset[0].NameAr || '').trim()) || '';
 }
 
+// Branch names map { id → nameAr }
+async function getBranchNames(dbName) {
+  const pool = await getPool(dbName);
+  const res  = await pool.request()
+    .query(`SELECT Id, NameAr FROM Branch ORDER BY Id`);
+  const map = { 0: 'غير محدد' };
+  res.recordset.forEach(r => { map[r.Id] = (r.NameAr || '').trim(); });
+  return map;
+}
+
 // Monthly totals by category — ported from generate_report.js lines 49-73
 async function getMonthly(dbName, startDate) {
   const pool = await getPool(dbName);
@@ -64,18 +73,18 @@ async function getMonthly(dbName, startDate) {
         YEAR(h.TransactionDate)  AS Yr,
         MONTH(h.TransactionDate) AS Mo,
         SUM(CASE WHEN ac.Code LIKE '4020101%' OR ac.Code LIKE '4020102%'
-                      OR ac.Code LIKE '4020104%' THEN jd.Debit ELSE 0 END) AS sal,
-        SUM(CASE WHEN ac.Code LIKE '4020105%'   THEN jd.Debit ELSE 0 END) AS rent,
+                      OR ac.Code LIKE '4020104%' THEN (jd.Debit - jd.Credit) ELSE 0 END) AS sal,
+        SUM(CASE WHEN ac.Code LIKE '4020105%'   THEN (jd.Debit - jd.Credit) ELSE 0 END) AS rent,
         SUM(CASE WHEN ac.Code LIKE '4020109%'
-                      OR ac.Code LIKE '4020110%' THEN jd.Debit ELSE 0 END) AS maint,
-        SUM(CASE WHEN ac.Code LIKE '4010201%'   THEN jd.Debit ELSE 0 END) AS sell,
-        SUM(CASE WHEN ac.Code LIKE '4010301%'   THEN jd.Debit ELSE 0 END) AS dist,
+                      OR ac.Code LIKE '4020110%' THEN (jd.Debit - jd.Credit) ELSE 0 END) AS maint,
+        SUM(CASE WHEN ac.Code LIKE '4010201%'   THEN (jd.Debit - jd.Credit) ELSE 0 END) AS sell,
+        SUM(CASE WHEN ac.Code LIKE '4010301%'   THEN (jd.Debit - jd.Credit) ELSE 0 END) AS dist,
         SUM(CASE WHEN ac.Code LIKE '4020106%' OR ac.Code LIKE '4020107%'
                       OR ac.Code LIKE '4020108%'
-                      OR ac.Code LIKE '4020111%' THEN jd.Debit ELSE 0 END) AS adm,
-        SUM(CASE WHEN ac.Code LIKE '4020115%'   THEN jd.Debit ELSE 0 END) AS char_,
-        SUM(CASE WHEN ac.Code LIKE '4020118%'   THEN jd.Debit ELSE 0 END) AS fin,
-        SUM(CASE WHEN ac.Code LIKE '4020117%'   THEN jd.Debit ELSE 0 END) AS oth
+                      OR ac.Code LIKE '4020111%' THEN (jd.Debit - jd.Credit) ELSE 0 END) AS adm,
+        SUM(CASE WHEN ac.Code LIKE '4020115%'   THEN (jd.Debit - jd.Credit) ELSE 0 END) AS char_,
+        SUM(CASE WHEN ac.Code LIKE '4020118%'   THEN (jd.Debit - jd.Credit) ELSE 0 END) AS fin,
+        SUM(CASE WHEN ac.Code LIKE '4020117%'   THEN (jd.Debit - jd.Credit) ELSE 0 END) AS oth
       FROM JournalVoucherHeader h
       JOIN JournalVoucherDetail jd ON jd.HeaderID = h.ID
       JOIN AccountChart         ac ON ac.ID = jd.AccountChart
@@ -93,7 +102,7 @@ async function getMonthly(dbName, startDate) {
   }));
 }
 
-// Branch totals by month — ported from generate_report.js lines 77-89
+// Branch totals by month with category breakdown
 async function getBranches(dbName, startDate) {
   const pool = await getPool(dbName);
   const res  = await pool.request()
@@ -103,7 +112,20 @@ async function getBranches(dbName, startDate) {
         ISNULL(jd.Branch, 0)     AS Br,
         YEAR(h.TransactionDate)  AS Yr,
         MONTH(h.TransactionDate) AS Mo,
-        SUM(jd.Debit)            AS Total
+        SUM(jd.Debit - jd.Credit) AS Total,
+        SUM(CASE WHEN ac.Code LIKE '4020101%' OR ac.Code LIKE '4020102%'
+                      OR ac.Code LIKE '4020104%' THEN (jd.Debit - jd.Credit) ELSE 0 END) AS sal,
+        SUM(CASE WHEN ac.Code LIKE '4020105%'   THEN (jd.Debit - jd.Credit) ELSE 0 END) AS rent,
+        SUM(CASE WHEN ac.Code LIKE '4020109%'
+                      OR ac.Code LIKE '4020110%' THEN (jd.Debit - jd.Credit) ELSE 0 END) AS maint,
+        SUM(CASE WHEN ac.Code LIKE '4010201%'   THEN (jd.Debit - jd.Credit) ELSE 0 END) AS sell,
+        SUM(CASE WHEN ac.Code LIKE '4010301%'   THEN (jd.Debit - jd.Credit) ELSE 0 END) AS dist,
+        SUM(CASE WHEN ac.Code LIKE '4020106%' OR ac.Code LIKE '4020107%'
+                      OR ac.Code LIKE '4020108%'
+                      OR ac.Code LIKE '4020111%' THEN (jd.Debit - jd.Credit) ELSE 0 END) AS adm,
+        SUM(CASE WHEN ac.Code LIKE '4020115%'   THEN (jd.Debit - jd.Credit) ELSE 0 END) AS char_,
+        SUM(CASE WHEN ac.Code LIKE '4020118%'   THEN (jd.Debit - jd.Credit) ELSE 0 END) AS fin,
+        SUM(CASE WHEN ac.Code LIKE '4020117%'   THEN (jd.Debit - jd.Credit) ELSE 0 END) AS oth
       FROM JournalVoucherHeader h
       JOIN JournalVoucherDetail jd ON jd.HeaderID = h.ID
       JOIN AccountChart         ac ON ac.ID = jd.AccountChart
@@ -116,23 +138,28 @@ async function getBranches(dbName, startDate) {
     br:    r.Br,
     month: `${r.Yr}-${String(r.Mo).padStart(2,'0')}`,
     total: +r.Total || 0,
+    sal:   +r.sal   || 0, rent: +r.rent  || 0, maint: +r.maint || 0,
+    sell:  +r.sell  || 0, dist: +r.dist  || 0, adm:   +r.adm   || 0,
+    fin:   +r.fin   || 0, char: +r.char_ || 0, oth:   +r.oth   || 0,
   }));
 }
 
-// Account totals — ported from generate_report.js lines 92-103
-async function getAccounts(dbName, startDate) {
-  const pool = await getPool(dbName);
-  const res  = await pool.request()
-    .input('startDate', sql.Date, startDate)
-    .query(`
-      SELECT ac.Code, ac.NameAr, SUM(jd.Debit) AS Total
-      FROM JournalVoucherHeader h
-      JOIN JournalVoucherDetail jd ON jd.HeaderID = h.ID
-      JOIN AccountChart         ac ON ac.ID = jd.AccountChart
-      WHERE ${BASE_WHERE}
-      GROUP BY ac.Code, ac.NameAr
-      ORDER BY Total DESC
-    `);
+// Account totals — optional endDate clips the upper bound
+async function getAccounts(dbName, startDate, endDate) {
+  const pool      = await getPool(dbName);
+  const req       = pool.request().input('startDate', sql.Date, startDate);
+  const endClause = endDate ? ' AND h.TransactionDate < @endDate' : '';
+  if (endDate) req.input('endDate', sql.Date, endDate);
+  const res = await req.query(`
+    SELECT ac.Code, ac.NameAr, SUM(jd.Debit - jd.Credit) AS Total
+    FROM JournalVoucherHeader h
+    JOIN JournalVoucherDetail jd ON jd.HeaderID = h.ID
+    JOIN AccountChart         ac ON ac.ID = jd.AccountChart
+    WHERE ${BASE_WHERE}${endClause}
+    GROUP BY ac.Code, ac.NameAr
+    HAVING SUM(jd.Debit - jd.Credit) <> 0
+    ORDER BY Total DESC
+  `);
 
   return res.recordset.map(r => ({
     code:  r.Code,
@@ -142,28 +169,29 @@ async function getAccounts(dbName, startDate) {
   }));
 }
 
-// Asset/vehicle totals — new server-side aggregation (was client-side in static HTML)
-async function getAssets(dbName, startDate) {
-  const pool = await getPool(dbName);
-  const res  = await pool.request()
-    .input('startDate', sql.Date, startDate)
-    .query(`
+// Asset/vehicle totals — optional endDate clips the upper bound
+async function getAssets(dbName, startDate, endDate) {
+  const pool      = await getPool(dbName);
+  const req       = pool.request().input('startDate', sql.Date, startDate);
+  const endClause = endDate ? ' AND h.TransactionDate < @endDate' : '';
+  if (endDate) req.input('endDate', sql.Date, endDate);
+  const res = await req.query(`
       SELECT
         ISNULL(LTRIM(RTRIM(fa.NameAr)), N'غير مرتبط')                      AS AssetName,
-        SUM(CASE WHEN ac.Code LIKE '4020110002%' THEN jd.Debit ELSE 0 END) AS MaintAmt,
-        SUM(CASE WHEN ac.Code LIKE '4020110001%' THEN jd.Debit ELSE 0 END) AS FuelAmt,
+        SUM(CASE WHEN ac.Code LIKE '4020110002%' THEN (jd.Debit - jd.Credit) ELSE 0 END) AS MaintAmt,
+        SUM(CASE WHEN ac.Code LIKE '4020110001%' THEN (jd.Debit - jd.Credit) ELSE 0 END) AS FuelAmt,
         SUM(CASE
           WHEN ac.Code NOT LIKE '4020110001%' AND ac.Code NOT LIKE '4020110002%'
-          THEN jd.Debit ELSE 0 END)                                         AS OtherAmt,
+          THEN (jd.Debit - jd.Credit) ELSE 0 END)                           AS OtherAmt,
         COUNT(*)                                                             AS EntryCount
       FROM JournalVoucherHeader h
       JOIN JournalVoucherDetail jd ON jd.HeaderID = h.ID
       JOIN AccountChart         ac ON ac.ID = jd.AccountChart
       LEFT JOIN FixedAsset      fa ON fa.Id  = jd.FixedAsset
-      WHERE ${BASE_WHERE}
+      WHERE ${BASE_WHERE}${endClause}
         AND jd.FixedAsset IS NOT NULL
       GROUP BY ISNULL(LTRIM(RTRIM(fa.NameAr)), N'غير مرتبط')
-      ORDER BY SUM(jd.Debit) DESC
+      ORDER BY SUM(jd.Debit - jd.Credit) DESC
     `);
 
   return res.recordset.map(r => ({
@@ -240,7 +268,7 @@ async function getDetails(dbName, opts) {
   const extraWhere = extras.length ? 'AND ' + extras.join(' AND ') : '';
 
   // col 0=date, col 2=amount, col 6=accCode, col 7=accName
-  const ORDER_MAP = { '0': 'h.TransactionDate', '2': 'jd.Debit', '6': 'ac.Code', '7': 'ac.NameAr' };
+  const ORDER_MAP = { '0': 'h.TransactionDate', '2': '(jd.Debit - jd.Credit)', '6': 'ac.Code', '7': 'ac.NameAr' };
   const orderCol  = ORDER_MAP[String(sortCol)] || 'h.TransactionDate';
   const orderDir  = sortDir === 'asc' ? 'ASC' : 'DESC';
 
@@ -259,7 +287,7 @@ async function getDetails(dbName, opts) {
         CAST(h.TransactionDate AS DATE)     AS TxDate,
         ac.Code                             AS AccCode,
         ac.NameAr                           AS AccName,
-        jd.Debit                            AS Amount,
+        (jd.Debit - jd.Credit)              AS Amount,
         ISNULL(jd.Branch, 0)                AS Br,
         ISNULL(LTRIM(RTRIM(fa.NameAr)), '') AS Asset,
         CASE
@@ -292,4 +320,4 @@ async function getDetails(dbName, opts) {
   return { rows, total, page, pageSize };
 }
 
-module.exports = { getMonthly, getBranches, getAccounts, getAssets, getDetails, getCompanyName };
+module.exports = { getMonthly, getBranches, getAccounts, getAssets, getDetails, getCompanyName, getBranchNames };

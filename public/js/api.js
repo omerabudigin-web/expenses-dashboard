@@ -34,5 +34,16 @@ const API = (() => {
     return res.json();
   }
 
-  return { fetchDetails, fetchConfig };
+  async function fetchConsolidated(dbs) {
+    try {
+      const res = await fetch(`/api/consolidated?dbs=${encodeURIComponent(dbs.join(','))}`);
+      if (!res.ok) throw new Error(res.statusText);
+      return res.json();
+    } catch (err) {
+      console.error('[api] fetchConsolidated:', err);
+      return null;
+    }
+  }
+
+  return { fetchDetails, fetchConfig, fetchConsolidated };
 })();

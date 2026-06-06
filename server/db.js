@@ -17,7 +17,7 @@ const BASE_CONFIG = {
     encrypt:                process.env.DB_ENCRYPT    === 'true',
     trustServerCertificate: process.env.DB_TRUST_CERT === 'true',
     connectTimeout:  20000,
-    requestTimeout:  45000,
+    requestTimeout:  120000,
   },
   pool: { max: 3, min: 0, idleTimeoutMillis: 60000 },
 };

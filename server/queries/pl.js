@@ -6,32 +6,17 @@ const AR_MONTHS = ['','يناير','فبراير','مارس','أبريل','ما�
                    'يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
 
 /*
- * COGS method: net debit on perpetual COGS account (4010101001).
+ * Account groupings — match ERP P&L chart-of-accounts classification exactly:
  *
- * Using the perpetual account directly (Debit − Credit) gives correct results
- * because it automatically captures:
- *   - Cat6 entries: actual sales COGS (debit 4010101001, credit inventory)
- *   - Cat14 entries: cost corrections/reinstatements (net adjustment)
- *   - Cat7 entries: sales return reversals (credit 4010101001)
+ *   COGS   4010101%  — all accounts under تكلفة البضاعة المباعة:
+ *                      001 perpetual COGS, 002 allowed discounts, 006 sales disc,
+ *                      007 agent commissions, etc.
  *
- * The periodic formula (Purchases − Returns + Landed − InventoryNetChange) was
- * distorted by:
- *   1. CategoryID=2 "فاتورة مشتريات" receipts that have no JVD inventory entry,
- *      inflating purchases without an offsetting inventory change.
- *   2. Large Cat14 reclassification entries in some months inflating inv net change.
+ *   OpEx   4010301%  — transport & freight (dist) — full group, no exclusions
+ *   OpEx   4020106%  — fees, customs, clearance (adm) — full group, no exclusions
  *
- * Landed costs (transport 4010301001 + customs 4020106008 + clearance 4020106010)
- * are added separately as they are not reflected in 4010101001.
- *
- * Direct cost additions folded into COGS:
- *   4010101006 (خصم مبيعات) and 4010101007 (عمولات المناديب) sit under the
- *   تكلفة المبيعات parent but are not in 4010101001 — added here so gross profit
- *   matches the ERP chart of accounts cost-of-sales grouping.
- *
- * OpEx: all categories use net (Debit − Credit) to capture reversals correctly.
- * OpEx adjustments:
- *   dist: excludes 4010301001 (moved to landed costs inside COGS)
- *   adm:  excludes 4020106008 and 4020106010 (moved to landed costs inside COGS)
+ * Prior approach put 4010301001, 4020106008, 4020106010 into COGS as "landed costs".
+ * That diverged from the ERP P&L which keeps all of these in OpEx. Removed.
  */
 async function getPLMonthly(dbName, startDate) {
   const pool = await getPool(dbName);
@@ -40,7 +25,7 @@ async function getPLMonthly(dbName, startDate) {
     .query(`
       WITH
 
-      /* ── Revenue, COGS, landed costs, and OpEx from JVD ── */
+      /* ── Revenue, COGS, and OpEx from JVD ── */
       jv AS (
         SELECT
           YEAR(h.TransactionDate)  AS Yr,
@@ -50,25 +35,15 @@ async function getPLMonthly(dbName, startDate) {
           SUM(CASE WHEN ac.Code LIKE '5%'
                    THEN jd.Credit - jd.Debit ELSE 0 END)            AS revenue,
 
-          /* COGS: net debit on perpetual account — includes all corrections */
-          SUM(CASE WHEN ac.Code = '4010101001'
+          /* COGS: full 4010101% group — matches ERP P&L grouping */
+          SUM(CASE WHEN ac.Code LIKE '4010101%'
                    THEN jd.Debit - jd.Credit ELSE 0 END)            AS cogsBase,
 
           /* Other direct cost bucket (40101020%) */
           SUM(CASE WHEN ac.Code LIKE '40101020%'
                    THEN jd.Debit - jd.Credit ELSE 0 END)            AS otherCost,
 
-          /* Landed costs: transport (net) + customs + clearance */
-          SUM(CASE WHEN ac.Code = '4010301001'
-                    OR ac.Code = '4020106008'
-                    OR ac.Code = '4020106010'
-                   THEN jd.Debit - jd.Credit ELSE 0 END)            AS landed,
-
-          /* Direct cost additions: allowed discount + sales discounts + agent commissions */
-          SUM(CASE WHEN ac.Code IN ('4010101002','4010101006','4010101007')
-                   THEN jd.Debit - jd.Credit ELSE 0 END)            AS directCosts,
-
-          /* OpEx — transport removed from dist; customs/clearance removed from adm */
+          /* OpEx — salaries */
           SUM(CASE WHEN ac.Code LIKE '4020101%'
                             OR ac.Code LIKE '4020102%'
                             OR ac.Code LIKE '4020104%'
@@ -84,14 +59,12 @@ async function getPLMonthly(dbName, startDate) {
           SUM(CASE WHEN ac.Code LIKE '4010201%'
                    THEN jd.Debit - jd.Credit ELSE 0 END)            AS sell,
 
-          /* dist: 4010301% minus 4010301001 (moved to landed) */
+          /* dist: full 4010301% — transport & freight (ERP OpEx) */
           SUM(CASE WHEN ac.Code LIKE '4010301%'
-                            AND ac.Code != '4010301001'
                    THEN jd.Debit - jd.Credit ELSE 0 END)            AS dist,
 
-          /* adm: 4020106% minus customs/clearance (moved to landed) */
-          SUM(CASE WHEN (ac.Code LIKE '4020106%'
-                         AND ac.Code NOT IN ('4020106008','4020106010'))
+          /* adm: full 4020106% (fees/customs/clearance) + other admin groups */
+          SUM(CASE WHEN ac.Code LIKE '4020106%'
                             OR ac.Code LIKE '4020107%'
                             OR ac.Code LIKE '4020108%'
                             OR ac.Code LIKE '4020111%'
@@ -117,7 +90,7 @@ async function getPLMonthly(dbName, startDate) {
       SELECT
         jv.Yr, jv.Mo,
         jv.revenue,
-        jv.cogsBase + jv.landed + jv.directCosts                    AS cogs,
+        jv.cogsBase                                                  AS cogs,
         jv.otherCost,
         jv.sal,   jv.rent,  jv.maint, jv.sell,
         jv.dist,  jv.adm,   jv.char_, jv.fin,   jv.oth

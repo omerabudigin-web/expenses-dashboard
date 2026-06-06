@@ -21,6 +21,7 @@ const BRANCH_LABEL = {
   4: 'الفرع الرابع',
   5: 'الفرع الخامس',
 };
+// Populated at runtime from server branchNames (Branch.NameAr)
 
 // P&L statement line labels (Arabic)
 const PL_LABELS = {
@@ -45,6 +46,16 @@ const PL_COLORS = {
   netLoss:         '#da4a4a',
   connector:       '#3a5a7a',
   subtotal:        '#5a7a9a',
+};
+
+// Balance sheet section labels keyed by first 3 chars of account code
+const BS_SECTION = {
+  '101': 'الأصول الثابتة',
+  '102': 'مشاريع تحت التنفيذ',
+  '103': 'الأصول المتداولة',
+  '201': 'الخصوم المتداولة',
+  '202': 'الخصوم غير المتداولة',
+  '301': 'حقوق الملكية',
 };
 
 const CAT_COLORS = {

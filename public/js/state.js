@@ -6,7 +6,9 @@ const State = (() => {
     branches:    [],
     accounts:    [],
     assets:      [],
-    pl:          [],
+    pl:              [],
+    bs:              null,
+    bankFacilities:  [],
     companyName: '',
     // Details tab — populated by REST /api/details
     detailRows:   [],

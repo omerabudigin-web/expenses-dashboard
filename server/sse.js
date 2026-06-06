@@ -1,6 +1,7 @@
 'use strict';
-const { getMonthly, getBranches, getAccounts, getAssets, getCompanyName } = require('./queries/expenses');
-const { getPLMonthly } = require('./queries/pl');
+const { getMonthly, getBranches, getAccounts, getAssets, getCompanyName, getBranchNames } = require('./queries/expenses');
+const { getPLMonthly }    = require('./queries/pl');
+const { getBSMonthly, getBankFacilitiesMonthly } = require('./queries/bs');
 
 // Map<dbName, Set<res>>  — clients grouped by their selected DB
 const clientsByDb = new Map();
@@ -49,15 +50,18 @@ function broadcast(dbName, event, data) {
 // ── Snapshot builder ───────────────────────────────────────────────────────────
 
 async function fetchSnapshot(dbName, startDate) {
-  const [monthly, branches, accounts, assets, companyName, pl] = await Promise.all([
+  const [monthly, branches, accounts, assets, companyName, branchNames, pl, bs, bankFacilities] = await Promise.all([
     getMonthly(dbName, startDate),
     getBranches(dbName, startDate),
     getAccounts(dbName, startDate),
     getAssets(dbName, startDate),
     getCompanyName(dbName),
+    getBranchNames(dbName),
     getPLMonthly(dbName, startDate),
+    getBSMonthly(dbName),
+    getBankFacilitiesMonthly(dbName),
   ]);
-  return { monthly, branches, accounts, assets, companyName, pl };
+  return { monthly, branches, accounts, assets, companyName, branchNames, pl, bs, bankFacilities };
 }
 
 // ── Push current data to a single newly-connected client ──────────────────────

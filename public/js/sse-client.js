@@ -22,16 +22,19 @@ const SSEClient = (() => {
     es.addEventListener('snapshot', e => {
       reconnectDelay = 1000;
       const data = JSON.parse(e.data);
+      if (data.branchNames) Object.assign(BRANCH_LABEL, data.branchNames);
       State.patch({
-        monthly:     data.monthly,
-        branches:    data.branches,
-        accounts:    data.accounts,
-        assets:      data.assets,
-        pl:          data.pl || [],
-        companyName: data.companyName || '',
-        connected:   true,
-        activeDb:    data.db,
-        timestamp:   data.timestamp,
+        monthly:        data.monthly,
+        branches:       data.branches,
+        accounts:       data.accounts,
+        assets:         data.assets,
+        pl:             data.pl             || [],
+        bs:             data.bs             || null,
+        bankFacilities: data.bankFacilities || [],
+        companyName:    data.companyName    || '',
+        connected:      true,
+        activeDb:       data.db,
+        timestamp:      data.timestamp,
       });
       emit(snapshotCbs, data);
     });
@@ -69,7 +72,9 @@ const SSEClient = (() => {
       branches:    [],
       accounts:    [],
       assets:      [],
-      pl:          [],
+      pl:             [],
+      bs:             null,
+      bankFacilities: [],
       detailRows:   [],
       detailTotal:  0,
       detailPage:   1,

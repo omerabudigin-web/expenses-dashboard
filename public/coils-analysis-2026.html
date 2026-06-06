@@ -1,0 +1,1134 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>تحليل الكويلات — 2026</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root{
+  --bg:#0d1117; --card:#161b22; --card2:#1a2030; --border:#21293a;
+  --text:#cdd2dd; --muted:#6a7d9a; --accent:#4a9eda;
+  --green:#4ada8e; --red:#da4a4a; --orange:#f5a623; --purple:#a78bfa; --pink:#f472b6;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',Tahoma,sans-serif;font-size:14px;line-height:1.6}
+.page{max-width:1300px;margin:0 auto;padding:20px}
+h1{font-size:1.6rem;font-weight:700}
+h2{font-size:1.05rem;font-weight:600;color:#e0e6f0;margin-bottom:14px}
+.page-header{background:linear-gradient(135deg,#1a2540,#0d1117);border:1px solid #2a3a5c;border-radius:12px;padding:20px 28px;margin-bottom:22px;display:flex;align-items:center;gap:18px}
+.logo{font-size:2.2rem}
+.meta{font-size:.75rem;color:var(--muted);margin-top:3px}
+.toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 16px;margin-bottom:20px}
+.btn{padding:6px 14px;border-radius:6px;border:none;cursor:pointer;font-size:.8rem;font-family:inherit}
+.btn.blue{background:#1a3a5c;color:#7ab8e8;border:1px solid #2a5a8c}
+.btn.blue:hover{background:#2a4a6c}
+.section{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:18px 22px;margin-bottom:18px}
+.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px}
+.kpi{background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:14px 16px;position:relative;overflow:hidden}
+.kpi::before{content:'';position:absolute;top:0;right:0;width:3px;height:100%;background:var(--accent)}
+.kpi[data-accent="green"]::before{background:var(--green)}
+.kpi[data-accent="red"]::before{background:var(--red)}
+.kpi[data-accent="orange"]::before{background:var(--orange)}
+.kpi[data-accent="purple"]::before{background:var(--purple)}
+.kpi[data-accent="pink"]::before{background:var(--pink)}
+.kpi .lbl{font-size:.72rem;color:var(--muted);margin-bottom:4px}
+.kpi .val{font-size:1.25rem;font-weight:700;color:#e8edf5}
+.kpi .sub{font-size:.73rem;color:var(--muted);margin-top:3px}
+.up{color:var(--green)} .dn{color:var(--red)} .neu{color:var(--orange)}
+table{width:100%;border-collapse:collapse;font-size:.8rem}
+th{background:#111823;color:#8aa8cc;font-weight:600;padding:8px 10px;text-align:center;border-bottom:2px solid #2a3a5c;white-space:nowrap}
+td{padding:7px 10px;border-bottom:1px solid #1e2a3a;text-align:center}
+tr:hover td{background:#1a2030}
+.num{font-family:'Courier New',monospace;font-weight:600}
+.pos{color:var(--green)} .neg{color:var(--red)} .warn{color:var(--orange)}
+.lft{text-align:right}
+.charts-row{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px}
+.chart-box{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px 18px}
+.chart-box.full{grid-column:1/-1}
+.chart-wrap{position:relative;height:240px}
+.chart-wrap.tall{height:280px}
+.scenario-tabs{display:flex;gap:6px;margin-bottom:14px}
+.sc-tab{padding:7px 18px;border-radius:6px;border:1px solid var(--border);cursor:pointer;font-size:.8rem;color:var(--muted);background:var(--card2)}
+.sc-tab.active{border-color:var(--accent);color:var(--accent);background:#1a2a3a}
+.sc-tab.opt.active{border-color:var(--green);color:var(--green);background:#0d2218}
+.sc-tab.cons.active{border-color:var(--orange);color:var(--orange);background:#2a1a0a}
+.notice{background:#2a1a0a;border:1px solid #5a3a1a;border-radius:7px;padding:10px 14px;font-size:.78rem;color:#e0a060;margin-bottom:14px}
+.doi-bar{display:inline-block;background:var(--accent);border-radius:2px;height:8px;vertical-align:middle;margin-right:6px}
+.fn{font-size:.7rem;color:var(--muted);margin-top:10px;border-top:1px solid #1a2030;padding-top:8px}
+.period-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:10px}
+.period-card{background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:14px 16px}
+.period-card h3{font-size:.82rem;font-weight:700;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+.period-card .row{display:flex;justify-content:space-between;font-size:.78rem;margin-bottom:4px}
+.period-card .row .k{color:var(--muted)}
+.period-card .row .v{font-weight:600}
+.btn.green{background:#1a3a2a;color:#6ad8a0;border:1px solid #2a6a4a}
+.btn.green:hover{background:#2a4a3a}
+.process-flow{display:flex;align-items:center;justify-content:center;gap:0;margin:12px 0 16px;flex-wrap:wrap}
+.pf-step{display:flex;flex-direction:column;align-items:center;background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:10px 18px;min-width:110px;font-size:.8rem;font-weight:600}
+.pf-step small{font-size:.68rem;color:var(--muted);font-weight:400;margin-top:2px}
+.pf-step.pf-active{border-color:var(--accent);background:#111d2a}
+.pf-step .pf-icon{font-size:1.5rem;margin-bottom:4px}
+.pf-arrow{font-size:1.5rem;color:var(--accent);padding:0 8px;font-weight:700}
+.mfg-notice{background:#1a1a2a;border:1px solid #2a3a6a;border-radius:7px;padding:10px 14px;font-size:.78rem;color:#8a9ae8;margin-bottom:14px}
+.mfg-badge{display:inline-block;background:#0d1a2a;border:1px solid #2a5a8c;color:#6ab8e8;border-radius:4px;font-size:.7rem;padding:2px 8px;vertical-align:middle;margin-right:6px}
+@media print{.toolbar,.btn{display:none!important}body{background:#fff;color:#000}.section,.kpi,.chart-box,.period-card{background:#f9f9f9!important;border-color:#ccc!important}}
+</style>
+</head>
+<body>
+<div class="page">
+
+<div class="page-header">
+  <div class="logo">🔩</div>
+  <div>
+    <h1>تحليل الكويلات — كويلات حديد تسليح</h1>
+    <div class="meta">من نقطة الافتتاح (30 سبتمبر 2025) حتى 4 يونيو 2026 · توقعات: يوليو – ديسمبر 2026</div>
+    <div class="meta">شركة حديد وأدوات البناء · ERP MekSoftDb1 · تاريخ الإنشاء: 2026-06-04</div>
+  </div>
+</div>
+
+<div class="toolbar">
+  <button class="btn blue" onclick="window.print()">🖨️ طباعة</button>
+  <button class="btn green" onclick="exportCoilsCSV()">📥 تصدير CSV</button>
+  <div style="flex:1"></div>
+  <span style="font-size:.75rem;color:var(--muted)">● بيانات مباشرة من قاعدة البيانات · 7 أصناف نشطة · وحدة: طن</span>
+</div>
+
+<div class="notice" style="background:#1a2a18;border:1px solid #2a5a28;color:#8ad898">
+  🔩 <strong>كويلات حديد تسليح</strong> — تحليل شامل من نقطة الافتتاح (30 سبتمبر 2025) حتى 4 يونيو 2026.
+  <strong>7 أصناف نشطة</strong> — وحدة القياس: <strong>طن</strong> — المصدر: ERP MekSoftDb1 مباشرة.
+</div>
+
+<!-- KPIs -->
+<div class="kpi-grid" id="kpis-coils"></div>
+
+<!-- Ledger Table -->
+<div class="section">
+  <h2>📋 دفتر حركة المخزون الشهرية — معدل الدوران = تكلفة المبيعات ÷ متوسط المخزون (ر.س)</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>الشهر</th>
+        <th>رصيد الافتتاح<br><small style="color:var(--muted);font-weight:400">طن · ر.س</small></th>
+        <th>+مشتريات<br><small style="color:var(--muted);font-weight:400">طن · ر.س</small></th>
+        <th>−مبيعات<br><small style="color:var(--muted);font-weight:400">طن · ر.س</small></th>
+        <th>تحويلات</th><th>±تسويات</th>
+        <th>رصيد الإغلاق<br><small style="color:var(--muted);font-weight:400">طن · ر.س</small></th>
+        <th>متوسط المخزون (ر.س)</th><th>معدل الدوران</th><th>فترة التخزين (يوم)</th>
+      </tr>
+    </thead>
+    <tbody id="tbody-coil-ledger"></tbody>
+    <tfoot id="tfoot-coil-ledger"></tfoot>
+  </table>
+  <div class="fn">
+    * يونيو 2026: بيانات جزئية (4 أيام فقط). التحويلات بين الفروع صافيها صفر على مستوى الشركة.<br>
+    ** تكلفة المبيعات = كمية التسليم × 2,032 ر.س/طن (متوسط سعر التكلفة التاريخي المحسوب من فواتير الشراء ERP).
+    معدل الدوران = تكلفة المبيعات ÷ متوسط قيمة المخزون. فترة التخزين = (متوسط المخزون ÷ تكلفة المبيعات) × أيام الشهر.
+  </div>
+</div>
+
+<!-- Stock Chart -->
+<div class="charts-row">
+  <div class="chart-box full">
+    <h2>📈 مسار المخزون الشهري (طن) — مع المشتريات والمبيعات</h2>
+    <div class="chart-wrap tall"><canvas id="chart-coil-stock"></canvas></div>
+  </div>
+</div>
+
+<!-- Flow + DOI -->
+<div class="charts-row">
+  <div class="chart-box">
+    <h2>⚖️ المشتريات مقابل المبيعات (طن)</h2>
+    <div class="chart-wrap"><canvas id="chart-coil-flow"></canvas></div>
+  </div>
+  <div class="chart-box">
+    <h2>🕐 فترة التخزين بالأيام (DOI)</h2>
+    <div class="chart-wrap"><canvas id="chart-coil-doi"></canvas></div>
+  </div>
+</div>
+
+<!-- Item Breakdown -->
+<div class="section">
+  <h2>🔩 تحليل الحركة حسب الصنف — من الافتتاح حتى الآن</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>الصنف</th>
+        <th>مخزون الافتتاح<br><small style="color:var(--muted);font-weight:400">طن · ر.س</small></th>
+        <th>إجمالي الاستلام<br><small style="color:var(--muted);font-weight:400">طن · ر.س</small></th>
+        <th>إجمالي التسليم / تكلفة المبيعات<br><small style="color:var(--muted);font-weight:400">طن · ر.س</small></th>
+        <th>تسويات</th>
+        <th>المخزون الحالي<br><small style="color:var(--muted);font-weight:400">طن · ر.س</small></th>
+        <th>متوسط المخزون (ر.س)</th><th>معدل الدوران</th>
+      </tr>
+    </thead>
+    <tbody id="tbody-coil-items"></tbody>
+    <tfoot id="tfoot-coil-items"></tfoot>
+  </table>
+</div>
+
+<!-- Revenue + Price -->
+<div class="charts-row">
+  <div class="chart-box full">
+    <h2>💰 الإيراد الشهري وسعر البيع المتوسط للطن</h2>
+    <div class="chart-wrap tall"><canvas id="chart-coil-price"></canvas></div>
+  </div>
+</div>
+
+<!-- Transfers -->
+<div class="charts-row">
+  <div class="chart-box full">
+    <h2>🔄 حجم التحويلات بين الفروع (طن صادر شهرياً)</h2>
+    <div class="chart-wrap"><canvas id="chart-coil-tr"></canvas></div>
+  </div>
+</div>
+
+<!-- Revenue & Margin Analysis -->
+<div class="section">
+  <h2>💹 تحليل الإيراد والهامش الشهري — من فواتير البيع</h2>
+  <div class="notice notice-blue" style="background:#0a1a2a;border:1px solid #1a4a7a;color:#7ab8e8;margin-bottom:12px">
+    ℹ️ الإيراد وHامش الربح من <strong>فواتير البيع</strong> (بتاريخ الفاتورة) · تكلفة المبيعات = الكمية المفوترة × 2,032 ر.س/طن ·
+    قد يوجد فارق توقيت بين تاريخ الفاتورة وتاريخ التسليم الفعلي في ERP.
+  </div>
+  <div class="kpi-grid" id="kpis-margin"></div>
+  <table>
+    <thead>
+      <tr>
+        <th>الشهر</th>
+        <th>الإيراد (ر.س)</th>
+        <th>كمية الفاتورة (طن)</th>
+        <th>سعر البيع (ر.س/طن)</th>
+        <th>تكلفة المبيعات (ر.س)</th>
+        <th>ربح إجمالي (ر.س)</th>
+        <th>هامش %</th>
+        <th>ربح/طن (ر.س)</th>
+      </tr>
+    </thead>
+    <tbody id="tbody-margin"></tbody>
+    <tfoot id="tfoot-margin"></tfoot>
+  </table>
+</div>
+
+<!-- Period Comparison -->
+<div class="section">
+  <h2>📅 مقارنة الفترات — Q4 2025 · Q1 2026 · Q2 2026</h2>
+  <div id="period-comparison-grid"></div>
+  <table style="margin-top:14px">
+    <thead>
+      <tr>
+        <th>المؤشر</th>
+        <th>Q4 2025 (أكت–ديس)</th>
+        <th>Q1 2026 (ين–مر)</th>
+        <th>Q2 2026* (أب–يون)</th>
+        <th>المجموع / المتوسط</th>
+      </tr>
+    </thead>
+    <tbody id="tbody-periods"></tbody>
+  </table>
+  <div class="fn">* Q2 2026 جزئي: 3 أشهر كاملة + 4 أيام من يونيو.</div>
+</div>
+
+<!-- Manufacturing Analysis -->
+<div class="section">
+  <h2>🏭 تحليل التصنيع — مصنع حوراء <span class="mfg-badge">كويلات → حديد تسليح</span></h2>
+
+  <div class="process-flow">
+    <div class="pf-step">
+      <span class="pf-icon">🔩</span>
+      <span>كويلات خام</span>
+      <small>المواد الأولية</small>
+    </div>
+    <div class="pf-arrow">→</div>
+    <div class="pf-step pf-active">
+      <span class="pf-icon">🏭</span>
+      <span>مصنع حوراء</span>
+      <small>تقطيع · تشكيل · تبريد</small>
+    </div>
+    <div class="pf-arrow">→</div>
+    <div class="pf-step">
+      <span class="pf-icon">⚙️</span>
+      <span>حديد تسليح</span>
+      <small>منتج نهائي</small>
+    </div>
+  </div>
+
+  <div class="mfg-notice">
+    📊 المدخلات: من <strong>سجلات التحويلات الصادرة (TransferIssued)</strong> من المخزون الرئيسي إلى المصنع.
+    وُثِّق <strong>76 سجل RawMaterialIssue</strong> في ERP (أكتوبر 2025 – يونيو 2026) وأوامر إنتاج تصل لـ <strong>184 أمر</strong>.
+    كفاءة التحويل المُفترَضة: <strong>97%</strong> (3% هدر تشغيل — قيم قياسية للدرفلة الباردة).
+    بيانات FinishedGoodsReceipt قيد الاسترداد من قاعدة البيانات.
+  </div>
+
+  <div class="kpi-grid" id="kpis-mfg"></div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>الشهر</th>
+        <th>مدخلات كويلات<br><small style="color:var(--muted);font-weight:400">طن · ر.س</small></th>
+        <th>إنتاج متوقع (97%)<br><small style="color:var(--muted);font-weight:400">طن</small></th>
+        <th>هدر (3%)<br><small style="color:var(--muted);font-weight:400">طن</small></th>
+        <th>تكلفة المواد (ر.س)</th>
+        <th>تكلفة التحويل* (ر.س)</th>
+        <th>إجمالي تكلفة الإنتاج</th>
+        <th>معدل يومي<br><small style="color:var(--muted);font-weight:400">طن/يوم</small></th>
+        <th>أوامر إنتاج<br><small style="color:var(--muted);font-weight:400">تقدير</small></th>
+      </tr>
+    </thead>
+    <tbody id="tbody-mfg"></tbody>
+    <tfoot id="tfoot-mfg"></tfoot>
+  </table>
+  <div class="fn">
+    * تكلفة التحويل (Processing Cost) = كمية المدخلات × 350 ر.س/طن تقديري (أجور + طاقة + استهلاك معدات).
+    أوامر الإنتاج مقدرة من نسبة الحجم × 184 أمر إنتاج موثق في ERP.
+    المصدر الأساسي: TransferIssued من قاعدة البيانات + تأكيد 76 سجل RawMaterialIssue.
+  </div>
+</div>
+
+<!-- Manufacturing Charts -->
+<div class="charts-row">
+  <div class="chart-box">
+    <h2>🏭 حجم الإنتاج الشهري — مدخلات وإنتاج (طن)</h2>
+    <div class="chart-wrap"><canvas id="chart-mfg-volume"></canvas></div>
+  </div>
+  <div class="chart-box">
+    <h2>🔩 توزيع أنواع الكويلات في التصنيع</h2>
+    <div class="chart-wrap"><canvas id="chart-mfg-items"></canvas></div>
+  </div>
+</div>
+
+<!-- Item Manufacturing Breakdown -->
+<div class="section">
+  <h2>📦 تحليل المدخلات حسب نوع الكويل — التوزيع التقديري</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>نوع الكويل</th>
+        <th>حصة من التصنيع (%)</th>
+        <th>الكمية المدخلة (طن)</th>
+        <th>الكمية المنتجة (طن)</th>
+        <th>الهدر (طن)</th>
+        <th>تكلفة المدخلات (ر.س)</th>
+        <th>إجمالي تكلفة الإنتاج (ر.س)</th>
+      </tr>
+    </thead>
+    <tbody id="tbody-mfg-items"></tbody>
+    <tfoot id="tfoot-mfg-items"></tfoot>
+  </table>
+  <div class="fn">التوزيع تقديري بناءً على نسبة التسليم الفعلي لكل صنف × إجمالي التحويلات للمصنع.</div>
+</div>
+
+<!-- Forecast -->
+<div class="section">
+  <h2>🔮 التوقعات المستقبلية — يوليو إلى ديسمبر 2026</h2>
+  <div class="notice" style="background:#1a1a2a;border:1px solid #2a2a6a;color:#8a8ae8">
+    ⚡ <strong>تحذير:</strong> المخزون الحالي <strong>60.5 طن</strong> — بمعدل الاستهلاك الأخير ستنضب الكمية خلال
+    <span id="coil-days-left" style="color:#f5a623;font-weight:700">—</span> يوم.
+  </div>
+  <div class="scenario-tabs">
+    <div class="sc-tab cons" onclick="showCoilForecast('cons',this)">تحفظي (3MA×0.80)</div>
+    <div class="sc-tab active" onclick="showCoilForecast('base',this)">قاعدي (3MA)</div>
+    <div class="sc-tab opt" onclick="showCoilForecast('opt',this)">موسمي (+30%)</div>
+  </div>
+  <div class="kpi-grid" id="kpis-coil-forecast"></div>
+  <table>
+    <thead>
+      <tr>
+        <th>الشهر</th><th>الطلب المتوقع (طن)</th><th>احتياج الشراء (طن)</th>
+        <th>تكلفة تقديرية (ر.س)</th><th>إيراد متوقع (ر.س)</th><th>هامش متوقع (ر.س)</th>
+      </tr>
+    </thead>
+    <tbody id="tbody-coil-forecast"></tbody>
+    <tfoot id="tfoot-coil-forecast"></tfoot>
+  </table>
+</div>
+
+<!-- Forecast Chart -->
+<div class="charts-row">
+  <div class="chart-box full">
+    <h2>📊 توقع الطلب يوليو – ديسمبر 2026 مع المقارنة التاريخية</h2>
+    <div class="chart-wrap tall"><canvas id="chart-coil-forecast"></canvas></div>
+  </div>
+</div>
+
+</div><!-- /page -->
+<script>
+const fmt  = v => Math.round(v).toLocaleString('ar-SA');
+const fmtP = v => (isFinite(v)?v.toFixed(1):'—') + '%';
+
+const COIL_LEDGER = [
+  {mo:'أكتوبر 2025', short:'أكت-25', days:31, open:396.00,  purch:35.36,   sales:376.13, tr_iss:156.00,  adj:0.00,   close:55.23},
+  {mo:'نوفمبر 2025', short:'نوف-25', days:30, open:55.23,   purch:1356.92, sales:381.38, tr_iss:135.48,  adj:6.13,   close:1036.90},
+  {mo:'ديسمبر 2025', short:'ديس-25', days:31, open:1036.90, purch:3987.65, sales:1702.06,tr_iss:417.54,  adj:-0.20,  close:3322.28},
+  {mo:'يناير 2026',  short:'ين-26',  days:31, open:3322.28, purch:40.85,   sales:1441.82,tr_iss:315.53,  adj:0.00,   close:1921.31},
+  {mo:'فبراير 2026', short:'فب-26',  days:28, open:1921.31, purch:0.00,    sales:936.55, tr_iss:323.25,  adj:0.00,   close:984.76},
+  {mo:'مارس 2026',   short:'مر-26',  days:31, open:984.76,  purch:8.37,    sales:413.51, tr_iss:346.09,  adj:0.05,   close:579.67},
+  {mo:'أبريل 2026',  short:'أب-26',  days:30, open:579.67,  purch:0.00,    sales:326.49, tr_iss:204.53,  adj:-41.60, close:211.58},
+  {mo:'مايو 2026',   short:'مي-26',  days:31, open:211.58,  purch:109.79,  sales:226.80, tr_iss:174.52,  adj:-1.53,  close:93.04},
+  {mo:'يونيو 2026*', short:'يون-26', days:4,  open:93.04,   purch:32.63,   sales:65.17,  tr_iss:32.63,   adj:0.00,   close:60.50},
+];
+const COIL_REV       = [574204,600527,3178739,2818694,1508656,295279,253696,91253,116005];
+const COIL_PRICE     = [2561,2600,2578,2570,2584,2676,2951,2875,3565];
+const COIL_ITEMS_DATA = [
+  {name:'كويل 10مم مشرشر', open:34,  receipt:193.87, deliver:246.51, adj:51.27,  current:32.63, color:'#4a9eda'},
+  {name:'كويل 10مم أملس',  open:94,  receipt:2059.00,deliver:2129.22,adj:-23.78, current:0,     color:'#a78bfa'},
+  {name:'كويل 11مم أملس',  open:116, receipt:597.43, deliver:618.12, adj:-95.31, current:0,     color:'#f5a623'},
+  {name:'كويل 8مم أملس',   open:98,  receipt:2132.38,deliver:2176.98,adj:-25.53, current:27.87, color:'#f472b6'},
+  {name:'كويل 9مم أملس',   open:32,  receipt:539.67, deliver:516.68, adj:-2.99,  current:0,     color:'#34d399'},
+  {name:'كويل 8مم مشرشر',  open:4,   receipt:40.85,  deliver:44.46,  adj:60.35,  current:0,     color:'#64b5f6'},
+  {name:'كويل 5.5مم أملس', open:18,  receipt:8.37,   deliver:25.21,  adj:-1.16,  current:0,     color:'#4ada8e'},
+];
+const COIL_3MA            = 276.6;
+const COIL_AVG_PRICE      = 2900;
+const COIL_AVG_COST       = 2400;
+const COIL_FORECAST_MONTHS= ['يوليو 2026','أغسطس 2026','سبتمبر 2026','أكتوبر 2026','نوفمبر 2026','ديسمبر 2026'];
+const COIL_SEASONAL       = [1.00,0.90,1.10,1.40,1.50,1.40];
+
+// متوسط سعر التكلفة التاريخي — محسوب من فواتير الشراء ERP (Net ÷ كمية الاستلام)
+const COIL_COST_PER_TON = 2032;
+
+let currentScenario = 'base';
+
+const CHART_DEFAULTS = {
+  plugins:{legend:{labels:{color:'#8aa8cc',font:{size:11}}}},
+  scales:{
+    x:{ticks:{color:'#6a7d9a'},grid:{color:'#1e2a3a'}},
+    y:{ticks:{color:'#6a7d9a'},grid:{color:'#1e2a3a'}}
+  }
+};
+
+// ── KPIs ──
+function buildCoilKPIs(){
+  const totPurch = COIL_LEDGER.reduce((s,r)=>s+r.purch,0);
+  const totSales = COIL_LEDGER.reduce((s,r)=>s+r.sales,0);
+  const totTr    = COIL_LEDGER.reduce((s,r)=>s+r.tr_iss,0);
+  const totRev   = COIL_REV.reduce((s,v)=>s+v,0);
+  const peakStock= Math.max(...COIL_LEDGER.map(r=>r.close));
+  const avgInv   = COIL_LEDGER.slice(0,8).reduce((s,r)=>s+(r.open+r.close)/2,0)/8;
+  const avgSales = COIL_LEDGER.slice(0,8).reduce((s,r)=>s+r.sales,0)/8;
+  const avgDOI   = avgInv/(avgSales/30.4);
+  const dailyRate= COIL_LEDGER[7].sales/31;
+  const daysLeft = 60.5/dailyRate;
+  document.getElementById('coil-days-left').textContent = daysLeft.toFixed(0);
+  const cards=[
+    {lbl:'المخزون الحالي',        val:'60.5 طن',               sub:'رصيد الإغلاق 4 يونيو 2026',           accent:'orange'},
+    {lbl:'إجمالي الاستلام',       val:fmt(totPurch.toFixed(0))+' طن', sub:'أكتوبر 2025 – يونيو 2026',    accent:'accent'},
+    {lbl:'إجمالي المبيعات',       val:fmt(totSales.toFixed(0))+' طن', sub:'من حركة التسليم الفعلية',      accent:'green'},
+    {lbl:'إجمالي التحويلات',      val:fmt(totTr.toFixed(0))+' طن',    sub:'بين الفروع (صافي = صفر)',      accent:'purple'},
+    {lbl:'إجمالي الإيراد',        val:(totRev/1e6).toFixed(2)+' م ر.س',sub:'من فواتير البيع ERP',         accent:'green'},
+    {lbl:'ذروة المخزون',          val:fmt(peakStock.toFixed(0))+' طن', sub:'نهاية ديسمبر 2025',           accent:'red'},
+    {lbl:'متوسط فترة التخزين',    val:avgDOI.toFixed(0)+' يوم',        sub:'أكتوبر–مايو (8 أشهر)',        accent:'accent'},
+    {lbl:'أيام حتى نضوب المخزون', val:daysLeft.toFixed(0)+' يوم',      sub:'بمعدل مايو 2026 ('+dailyRate.toFixed(1)+' ط/يوم)', accent:daysLeft<10?'red':'orange'},
+  ];
+  document.getElementById('kpis-coils').innerHTML=cards.map(c=>`
+    <div class="kpi" data-accent="${c.accent}">
+      <div class="lbl">${c.lbl}</div>
+      <div class="val">${c.val}</div>
+      <div class="sub">${c.sub}</div>
+    </div>`).join('');
+}
+
+// ── Ledger Table ──
+// دالة مساعدة: خلية مزدوجة طن + قيمة بالريال
+function dualCell(qty, valSar, qtyClass='', valClass='neg', showPlus=false){
+  const qSign = showPlus && qty>0 ? '+' : '';
+  const qDisp = qty>0 ? qSign+qty.toFixed(2) : (qty<0 ? qty.toFixed(2) : '—');
+  const vDisp = qty!==0 ? fmt(Math.round(Math.abs(valSar))) : '—';
+  return `<td>
+    <span class="num ${qtyClass}">${qDisp}</span><br>
+    <span style="font-size:.72rem;color:${qty!==0?'#7a9ab8':'var(--muted)'};">${vDisp} ر.س</span>
+  </td>`;
+}
+
+function buildCoilLedger(){
+  let tPurch=0, tSales=0, tAdj=0, tCogs=0, tAvgInvVal=0, rowCount=0;
+  document.getElementById('tbody-coil-ledger').innerHTML=COIL_LEDGER.map((r,i)=>{
+    tPurch+=r.purch; tSales+=r.sales; tAdj+=r.adj;
+    const openVal   = r.open  * COIL_COST_PER_TON;
+    const purchVal  = r.purch * COIL_COST_PER_TON;
+    const cogs_sar  = r.sales * COIL_COST_PER_TON;   // تكلفة المبيعات
+    const closeVal  = r.close * COIL_COST_PER_TON;
+    const avgInv    = (r.open+r.close)/2;
+    const avgInvVal = avgInv  * COIL_COST_PER_TON;
+    const turnover  = avgInvVal>0 ? cogs_sar/avgInvVal : 0;
+    const doi       = cogs_sar>0 ? (avgInvVal/cogs_sar)*r.days : 0;
+    const doiColor  = doi<15?'pos':doi<45?'warn':'neg';
+    const trColor   = r.tr_iss>300?'#f472b6':r.tr_iss>100?'#a78bfa':'var(--muted)';
+    const partial   = i===8?'<span style="font-size:.7rem;color:var(--muted)"> (4أ)</span>':'';
+    const closeColor= r.close<100?'#da4a4a':r.close<500?'#f5a623':'#4ada8e';
+    if(i<8){ tCogs+=cogs_sar; tAvgInvVal+=avgInvVal; rowCount++; }
+    return `<tr>
+      <td class="lft"><strong>${r.mo}</strong>${partial}</td>
+      ${dualCell(r.open,  openVal,  'warn',  '', false)}
+      ${dualCell(r.purch, purchVal, r.purch>500?'pos':'', '', true)}
+      <td>
+        <span class="num neg">${r.sales>0?'('+r.sales.toFixed(2)+')':'—'}</span><br>
+        <span style="font-size:.72rem;color:${r.sales>0?'#7a9ab8':'var(--muted)'};">${r.sales>0?fmt(Math.round(cogs_sar)):'—'} ر.س</span>
+      </td>
+      <td><span style="color:${trColor};font-size:.78rem">${r.tr_iss>0?'↔'+r.tr_iss.toFixed(0):'—'}</span></td>
+      <td><span class="num ${r.adj<0?'neg':r.adj>0?'pos':''}">${r.adj!==0?(r.adj>0?'+':'')+r.adj.toFixed(2):'—'}</span></td>
+      <td>
+        <span class="num" style="color:${closeColor}">${r.close.toFixed(1)}</span><br>
+        <span style="font-size:.72rem;color:${r.close>0?'#7a9ab8':'var(--muted)'};">${fmt(Math.round(closeVal))} ر.س</span>
+      </td>
+      <td><span class="num warn">${fmt(Math.round(avgInvVal))}</span></td>
+      <td><span class="${turnover>1.2?'pos':turnover>0.6?'warn':'neg'}">${turnover.toFixed(2)}x</span></td>
+      <td>
+        <span class="doi-bar" style="width:${Math.min(doi,90)}px;background:${doi<15?'#4ada8e':doi<45?'#f5a623':'#da4a4a'}"></span>
+        <span class="${doiColor}">${doi>0?doi.toFixed(0):'—'}</span>
+      </td>
+    </tr>`;
+  }).join('');
+
+  const avgTurnover = tAvgInvVal>0 ? tCogs/tAvgInvVal : 0;
+  const openTotVal  = 396.0 * COIL_COST_PER_TON;
+  const purchTotVal = tPurch * COIL_COST_PER_TON;
+  const closeTotVal = 60.5  * COIL_COST_PER_TON;
+  document.getElementById('tfoot-coil-ledger').innerHTML=`
+    <tr style="font-weight:700;background:#0d1a2a;border-top:2px solid var(--accent)">
+      <td class="lft">الإجمالي / المتوسط</td>
+      <td>
+        <span style="color:var(--muted)">396.0</span><br>
+        <span style="font-size:.72rem;color:#6a8a9a">${fmt(Math.round(openTotVal))} ر.س</span>
+      </td>
+      <td>
+        <span class="num pos">+${tPurch.toFixed(0)}</span><br>
+        <span style="font-size:.72rem;color:#6a8a9a">${fmt(Math.round(purchTotVal))} ر.س</span>
+      </td>
+      <td>
+        <span class="num neg">(${tSales.toFixed(0)})</span><br>
+        <span style="font-size:.72rem;color:#6a8a9a">${fmt(Math.round(tCogs))} ر.س</span>
+      </td>
+      <td></td>
+      <td><span class="num ${tAdj<0?'neg':'warn'}">${(tAdj>0?'+':'')+tAdj.toFixed(1)}</span></td>
+      <td>
+        <span class="num" style="color:var(--orange)">60.5</span><br>
+        <span style="font-size:.72rem;color:#6a8a9a">${fmt(Math.round(closeTotVal))} ر.س</span>
+      </td>
+      <td><span class="num warn">${fmt(Math.round(tAvgInvVal/rowCount))}</span></td>
+      <td><span class="${avgTurnover>1.2?'pos':avgTurnover>0.6?'warn':'neg'}">${avgTurnover.toFixed(2)}x</span></td>
+      <td></td>
+    </tr>`;
+}
+
+// ── Item Table ──
+function buildCoilItemTable(){
+  const totOpen =COIL_ITEMS_DATA.reduce((s,c)=>s+c.open,0);
+  const totRecpt=COIL_ITEMS_DATA.reduce((s,c)=>s+c.receipt,0);
+  const totDeliv=COIL_ITEMS_DATA.reduce((s,c)=>s+c.deliver,0);
+  const totAdj  =COIL_ITEMS_DATA.reduce((s,c)=>s+c.adj,0);
+  let totCogs=0, totAvgInvVal=0;
+
+  document.getElementById('tbody-coil-items').innerHTML=COIL_ITEMS_DATA.map(c=>{
+    const openVal   = c.open    * COIL_COST_PER_TON;
+    const recptVal  = c.receipt * COIL_COST_PER_TON;
+    const cogs_sar  = c.deliver * COIL_COST_PER_TON;
+    const currVal   = c.current * COIL_COST_PER_TON;
+    const avgQty    = (c.open + c.current) / 2 || c.open/2 || 0.5;
+    const avgInvVal = avgQty * COIL_COST_PER_TON;
+    const turnX     = avgInvVal>0 ? cogs_sar/avgInvVal : 0;
+    totCogs+=cogs_sar; totAvgInvVal+=avgInvVal;
+    const currColor = c.current>0?'#4ada8e':'var(--muted)';
+    return `<tr>
+      <td class="lft"><span style="color:${c.color};font-size:1.1em">●</span> <strong>${c.name}</strong></td>
+      <td>
+        <span class="num">${c.open.toFixed(0)}</span><br>
+        <span style="font-size:.72rem;color:#7a9ab8">${fmt(Math.round(openVal))} ر.س</span>
+      </td>
+      <td>
+        <span class="num pos">+${c.receipt.toFixed(0)}</span><br>
+        <span style="font-size:.72rem;color:#7a9ab8">${fmt(Math.round(recptVal))} ر.س</span>
+      </td>
+      <td>
+        <span class="num neg">(${c.deliver.toFixed(0)})</span><br>
+        <span style="font-size:.72rem;color:#7a9ab8">${fmt(Math.round(cogs_sar))} ر.س</span>
+      </td>
+      <td><span class="num ${c.adj<0?'neg':'pos'}">${(c.adj>0?'+':'')+c.adj.toFixed(1)}</span></td>
+      <td>
+        <span class="num" style="color:${currColor}">${c.current.toFixed(1)}</span><br>
+        <span style="font-size:.72rem;color:${c.current>0?'#7a9ab8':'var(--muted)'};">${c.current>0?fmt(Math.round(currVal))+' ر.س':'—'}</span>
+      </td>
+      <td><span class="num warn">${fmt(Math.round(avgInvVal))}</span></td>
+      <td><span class="${turnX>8?'pos':turnX>4?'warn':'neg'}">${turnX.toFixed(1)}x</span></td>
+    </tr>`;
+  }).join('');
+
+  const totTurn    = totAvgInvVal>0 ? totCogs/totAvgInvVal : 0;
+  const totOpenVal = totOpen  * COIL_COST_PER_TON;
+  const totRcpVal  = totRecpt * COIL_COST_PER_TON;
+  const totCurrVal = 60.5    * COIL_COST_PER_TON;
+  document.getElementById('tfoot-coil-items').innerHTML=`
+    <tr style="font-weight:700;background:#0d1a2a;border-top:2px solid var(--accent)">
+      <td class="lft">الإجمالي</td>
+      <td>
+        <span class="num">${totOpen}</span><br>
+        <span style="font-size:.72rem;color:#6a8a9a">${fmt(Math.round(totOpenVal))} ر.س</span>
+      </td>
+      <td>
+        <span class="num pos">+${totRecpt.toFixed(0)}</span><br>
+        <span style="font-size:.72rem;color:#6a8a9a">${fmt(Math.round(totRcpVal))} ر.س</span>
+      </td>
+      <td>
+        <span class="num neg">(${totDeliv.toFixed(0)})</span><br>
+        <span style="font-size:.72rem;color:#6a8a9a">${fmt(Math.round(totCogs))} ر.س</span>
+      </td>
+      <td><span class="num ${totAdj<0?'neg':'warn'}">${(totAdj>0?'+':'')+totAdj.toFixed(1)}</span></td>
+      <td>
+        <span class="num" style="color:#f5a623">60.5</span><br>
+        <span style="font-size:.72rem;color:#6a8a9a">${fmt(Math.round(totCurrVal))} ر.س</span>
+      </td>
+      <td><span class="num warn">${fmt(Math.round(totAvgInvVal))}</span></td>
+      <td><span class="${totTurn>8?'pos':totTurn>4?'warn':'neg'}">${totTurn.toFixed(1)}x</span></td>
+    </tr>`;
+}
+
+// ── Forecast Table ──
+function buildCoilForecastTable(scenario){
+  currentScenario=scenario;
+  const factors={cons:0.80,base:1.00,opt:null};
+  const SC_COLOR={cons:'var(--orange)',base:'var(--accent)',opt:'var(--green)'};
+  const col=SC_COLOR[scenario];
+  let cumStock=60.5,tDemand=0,tPurch=0,tCost=0,tRev=0,tMarg=0;
+  document.getElementById('tbody-coil-forecast').innerHTML=COIL_FORECAST_MONTHS.map((mo,i)=>{
+    const demand=Math.round((scenario==='opt'?COIL_3MA*COIL_SEASONAL[i]:COIL_3MA*(factors[scenario]||1)*COIL_SEASONAL[i])*10)/10;
+    const need=Math.max(0,demand-cumStock);
+    const cost=need*COIL_AVG_COST, rev=demand*COIL_AVG_PRICE, marg=rev-demand*COIL_AVG_COST;
+    tDemand+=demand; tPurch+=need; tCost+=cost; tRev+=rev; tMarg+=marg;
+    cumStock=cumStock+need-demand;
+    const margPct=rev>0?marg/rev*100:0;
+    return `<tr>
+      <td class="lft"><strong>${mo}</strong></td>
+      <td><span class="num" style="color:${col}">${demand.toFixed(0)}</span></td>
+      <td><span class="num ${need>200?'warn':need>0?'':'pos'}">${need>0?'+'+need.toFixed(0):'✓ مكتفٍ'}</span></td>
+      <td><span class="num">${need>0?fmt(Math.round(cost)):'—'}</span></td>
+      <td><span class="num pos">${fmt(Math.round(rev))}</span></td>
+      <td><span class="${margPct>20?'pos':margPct>10?'warn':'neg'}">${fmt(Math.round(marg))} (${margPct.toFixed(1)}%)</span></td>
+    </tr>`;
+  }).join('');
+  document.getElementById('tfoot-coil-forecast').innerHTML=`
+    <tr style="font-weight:700;background:#0d1a2a;border-top:2px solid ${col}">
+      <td class="lft">إجمالي H2-2026</td>
+      <td><span class="num" style="color:${col}">${tDemand.toFixed(0)} طن</span></td>
+      <td><span class="num warn">+${tPurch.toFixed(0)} طن</span></td>
+      <td><span class="num neg">${fmt(Math.round(tCost))}</span></td>
+      <td><span class="num pos">${fmt(Math.round(tRev))}</span></td>
+      <td><span class="${tMarg/tRev*100>15?'pos':'warn'}">${fmt(Math.round(tMarg))} (${(tMarg/tRev*100).toFixed(1)}%)</span></td>
+    </tr>`;
+  document.getElementById('kpis-coil-forecast').innerHTML=[
+    {lbl:'إجمالي الطلب المتوقع',val:tDemand.toFixed(0)+' طن',       sub:'يوليو – ديسمبر 2026',                 accent:'accent'},
+    {lbl:'احتياج الشراء',       val:tPurch.toFixed(0)+' طن',        sub:'بعد استهلاك المخزون الحالي',          accent:'orange'},
+    {lbl:'إيراد متوقع',         val:(tRev/1e6).toFixed(2)+' م ر.س',sub:'بسعر '+COIL_AVG_PRICE+' ر.س/طن تقديري',accent:'green'},
+    {lbl:'هامش تقديري',         val:(tMarg/tRev*100).toFixed(1)+'%',sub:fmt(Math.round(tMarg))+' ر.س',         accent:'green'},
+  ].map(k=>`<div class="kpi" data-accent="${k.accent}"><div class="lbl">${k.lbl}</div><div class="val">${k.val}</div><div class="sub">${k.sub}</div></div>`).join('');
+  buildCoilForecastChart();
+}
+
+function showCoilForecast(sc,el){
+  document.querySelectorAll('.sc-tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  buildCoilForecastTable(sc);
+}
+
+// ── Charts ──
+let cStock,cFlow,cDOI,cPrice,cTr,cForecast,cMfgVol,cMfgItems;
+
+function buildCharts(){
+  const labels=COIL_LEDGER.map(r=>r.short);
+  const closes=COIL_LEDGER.map(r=>r.close);
+  const purch =COIL_LEDGER.map(r=>r.purch);
+  const sales =COIL_LEDGER.map(r=>r.sales);
+  const tr_iss=COIL_LEDGER.map(r=>r.tr_iss);
+
+  if(cStock) cStock.destroy();
+  cStock=new Chart(document.getElementById('chart-coil-stock'),{
+    type:'bar',
+    data:{labels,datasets:[
+      {label:'مخزون الإغلاق (طن)',data:closes,backgroundColor:'rgba(74,158,218,0.5)',borderColor:'#4a9eda',borderWidth:1,order:2},
+      {label:'مشتريات (طن)',data:purch,backgroundColor:'rgba(74,218,142,0.45)',borderColor:'#4ada8e',borderWidth:1,order:2},
+      {label:'مبيعات/تسليم (طن)',data:sales.map(v=>-v),backgroundColor:'rgba(218,74,74,0.35)',borderColor:'#da4a4a',borderWidth:1,order:2},
+      {label:'مسار الرصيد',data:closes,type:'line',borderColor:'#f5a623',borderWidth:2.5,pointRadius:5,fill:false,order:1},
+    ]},
+    options:{...CHART_DEFAULTS,scales:{...CHART_DEFAULTS.scales,y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'طن',color:'#6a7d9a'}}}}
+  });
+
+  if(cFlow) cFlow.destroy();
+  cFlow=new Chart(document.getElementById('chart-coil-flow'),{
+    type:'bar',
+    data:{labels,datasets:[
+      {label:'مشتريات',data:purch,backgroundColor:'rgba(74,218,142,0.6)',borderColor:'#4ada8e',borderWidth:1},
+      {label:'مبيعات',data:sales,backgroundColor:'rgba(218,74,74,0.5)',borderColor:'#da4a4a',borderWidth:1},
+    ]},
+    options:{...CHART_DEFAULTS,scales:{...CHART_DEFAULTS.scales,y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'طن',color:'#6a7d9a'}}}}
+  });
+
+  const dois=COIL_LEDGER.slice(0,8).map(r=>{
+    const avg=(r.open+r.close)/2;
+    return r.sales>0?avg/(r.sales/r.days):0;
+  });
+  if(cDOI) cDOI.destroy();
+  cDOI=new Chart(document.getElementById('chart-coil-doi'),{
+    type:'bar',
+    data:{labels:COIL_LEDGER.slice(0,8).map(r=>r.short),datasets:[{
+      label:'فترة التخزين (يوم)',
+      data:dois,
+      backgroundColor:dois.map(d=>d<15?'rgba(74,218,142,0.7)':d<45?'rgba(245,166,35,0.7)':'rgba(218,74,74,0.7)'),
+      borderColor:dois.map(d=>d<15?'#4ada8e':d<45?'#f5a623':'#da4a4a'),
+      borderWidth:1,
+    }]},
+    options:{...CHART_DEFAULTS,scales:{...CHART_DEFAULTS.scales,y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'يوم',color:'#6a7d9a'}}}}
+  });
+
+  if(cPrice) cPrice.destroy();
+  cPrice=new Chart(document.getElementById('chart-coil-price'),{
+    type:'bar',
+    data:{labels,datasets:[
+      {label:'الإيراد (ر.س)',data:COIL_REV,backgroundColor:'rgba(74,218,142,0.5)',borderColor:'#4ada8e',borderWidth:1,order:2},
+      {label:'سعر البيع (ر.س/طن)',data:COIL_PRICE,type:'line',borderColor:'#f472b6',borderWidth:2,pointRadius:4,fill:false,yAxisID:'y2',order:1},
+    ]},
+    options:{...CHART_DEFAULTS,
+      scales:{
+        x:{...CHART_DEFAULTS.scales.x},
+        y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'الإيراد (ر.س)',color:'#6a7d9a'}},
+        y2:{position:'left',ticks:{color:'#f472b6'},grid:{drawOnChartArea:false},title:{display:true,text:'سعر/طن',color:'#f472b6'}}
+      }
+    }
+  });
+
+  if(cTr) cTr.destroy();
+  cTr=new Chart(document.getElementById('chart-coil-tr'),{
+    type:'bar',
+    data:{labels,datasets:[{
+      label:'تحويلات صادرة (طن)',
+      data:tr_iss,
+      backgroundColor:'rgba(167,139,250,0.6)',
+      borderColor:'#a78bfa',
+      borderWidth:1,
+    }]},
+    options:{...CHART_DEFAULTS,scales:{...CHART_DEFAULTS.scales,y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'طن',color:'#6a7d9a'}}}}
+  });
+}
+
+function buildCoilForecastChart(){
+  const histLabels=COIL_LEDGER.map(r=>r.short);
+  const foreLabels=['يول-26','أغس-26','سب-26','أكت-26','نوف-26','ديس-26'];
+  const allLabels=[...histLabels,...foreLabels];
+  const sc=currentScenario;
+  const factors={cons:0.80,base:1.00,opt:null};
+  const foreData=COIL_SEASONAL.map(s=>Math.round((sc==='opt'?COIL_3MA*s:COIL_3MA*(factors[sc]||1)*s)*10)/10);
+  const col={cons:'#f5a623',base:'#4a9eda',opt:'#4ada8e'}[sc];
+  const scLabel={cons:'تحفظي',base:'قاعدي',opt:'موسمي'}[sc];
+  if(cForecast) cForecast.destroy();
+  cForecast=new Chart(document.getElementById('chart-coil-forecast'),{
+    type:'line',
+    data:{labels:allLabels,datasets:[
+      {label:'فعلي (تسليم)',data:[...COIL_LEDGER.map(r=>r.sales),...Array(6).fill(null)],borderColor:'#4a9eda',backgroundColor:'rgba(74,158,218,0.15)',fill:true,tension:0.3,borderWidth:2,pointRadius:4},
+      {label:'توقع ('+scLabel+')',data:[...Array(9).fill(null),...foreData],borderColor:col,borderDash:[6,4],fill:false,tension:0.3,borderWidth:2,pointRadius:4},
+    ]},
+    options:{...CHART_DEFAULTS,
+      scales:{...CHART_DEFAULTS.scales,y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'طن/شهر',color:'#6a7d9a'}}}
+    }
+  });
+}
+
+// ── Revenue & Margin Table ──
+// تكلفة المبيعات هنا محسوبة من الكمية المفوترة (فاتورة البيع) لا من التسليم
+// = (إيراد الشهر ÷ متوسط سعر البيع) × سعر التكلفة
+function buildRevMarginTable(){
+  let tRev=0, tQty=0, tCogs=0, tGP=0;
+  const rows = COIL_LEDGER.map((r,i)=>{
+    const rev   = COIL_REV[i]   || 0;
+    const price = COIL_PRICE[i] || 1;
+    const invQty= rev / price;                        // كمية مستنتجة من الفاتورة
+    const cogs  = invQty * COIL_COST_PER_TON;         // تكلفة بناءً على كمية الفاتورة
+    const gp    = rev - cogs;
+    const margin= rev>0 ? gp/rev*100 : 0;
+    const gpPerTon = invQty>0 ? gp/invQty : 0;
+    tRev+=rev; tQty+=invQty; tCogs+=cogs; tGP+=gp;
+    return {mo:r.mo, rev, invQty, price, cogs, gp, margin, gpPerTon};
+  });
+
+  document.getElementById('tbody-margin').innerHTML = rows.map(row=>{
+    const mc = row.margin>25?'pos':row.margin>15?'warn':'neg';
+    return `<tr>
+      <td class="lft"><strong>${row.mo}</strong></td>
+      <td><span class="num pos">${fmt(Math.round(row.rev))}</span></td>
+      <td><span class="num">${row.invQty.toFixed(1)}</span></td>
+      <td><span class="num" style="color:#f472b6">${fmt(row.price)}</span></td>
+      <td><span class="num neg">${fmt(Math.round(row.cogs))}</span></td>
+      <td><span class="num ${row.gp>0?'pos':'neg'}">${fmt(Math.round(row.gp))}</span></td>
+      <td><span class="num ${mc}">${row.margin.toFixed(1)}%</span></td>
+      <td><span class="num ${mc}">${fmt(Math.round(row.gpPerTon))}</span></td>
+    </tr>`;
+  }).join('');
+
+  const tMargin = tRev>0 ? tGP/tRev*100 : 0;
+  const tGpPerTon = tQty>0 ? tGP/tQty : 0;
+  document.getElementById('tfoot-margin').innerHTML=`
+    <tr style="font-weight:700;background:#0d1a2a;border-top:2px solid var(--accent)">
+      <td class="lft">الإجمالي</td>
+      <td><span class="num pos">${fmt(Math.round(tRev))}</span></td>
+      <td><span class="num">${tQty.toFixed(0)}</span></td>
+      <td></td>
+      <td><span class="num neg">${fmt(Math.round(tCogs))}</span></td>
+      <td><span class="num pos">${fmt(Math.round(tGP))}</span></td>
+      <td><span class="num ${tMargin>25?'pos':tMargin>15?'warn':'neg'}">${tMargin.toFixed(1)}%</span></td>
+      <td><span class="num pos">${fmt(Math.round(tGpPerTon))} ر.س/طن</span></td>
+    </tr>`;
+
+  // KPIs للهامش
+  const bestMonth = rows.reduce((a,b)=>b.margin>a.margin?b:a);
+  const worstMonth= rows.filter(r=>r.rev>0).reduce((a,b)=>b.margin<a.margin?b:a);
+  document.getElementById('kpis-margin').innerHTML=[
+    {lbl:'إجمالي الإيراد',      val:fmt(Math.round(tRev))+' ر.س', sub:'من فواتير البيع',              accent:'green'},
+    {lbl:'إجمالي تكلفة المبيعات',val:fmt(Math.round(tCogs))+' ر.س',sub:'الكمية المفوترة × 2,032',     accent:'red'},
+    {lbl:'إجمالي الربح الإجمالي',val:fmt(Math.round(tGP))+' ر.س',  sub:'هامش إجمالي: '+tMargin.toFixed(1)+'%', accent:'green'},
+    {lbl:'أعلى هامش شهري',      val:bestMonth.margin.toFixed(1)+'%',sub:bestMonth.mo,                  accent:'accent'},
+    {lbl:'أدنى هامش شهري',       val:worstMonth.margin.toFixed(1)+'%',sub:worstMonth.mo,               accent:'orange'},
+    {lbl:'ربح/طن متوسط',         val:fmt(Math.round(tGpPerTon))+' ر.س',sub:'إجمالي الفترة',            accent:'accent'},
+  ].map(k=>`<div class="kpi" data-accent="${k.accent}"><div class="lbl">${k.lbl}</div><div class="val">${k.val}</div><div class="sub">${k.sub}</div></div>`).join('');
+}
+
+// ── Period Comparison ──
+function buildPeriodSummary(){
+  // Q4 2025: أكت-ديس (0,1,2) | Q1 2026: ين-مر (3,4,5) | Q2 2026: أب-يون (6,7,8)
+  const periods = [
+    {label:'Q4 2025', color:'#a78bfa', idx:[0,1,2]},
+    {label:'Q1 2026', color:'#4a9eda', idx:[3,4,5]},
+    {label:'Q2 2026*',color:'#f5a623', idx:[6,7,8]},
+  ];
+
+  const calcPeriod = (idx) => {
+    const rows = idx.map(i=>COIL_LEDGER[i]);
+    const tDays  = rows.reduce((s,r)=>s+r.days,0);
+    const tPurch = rows.reduce((s,r)=>s+r.purch,0);
+    const tSales = rows.reduce((s,r)=>s+r.sales,0);
+    const tTr    = rows.reduce((s,r)=>s+r.tr_iss,0);
+    const openInv= rows[0].open;
+    const closeInv=rows[rows.length-1].close;
+    const avgInv = rows.reduce((s,r)=>s+(r.open+r.close)/2,0)/rows.length;
+    const cogs_del= tSales * COIL_COST_PER_TON;          // COGS على أساس التسليم
+    const turnover= avgInv>0 ? cogs_del/(avgInv*COIL_COST_PER_TON) : 0; // = tSales/avgInv
+    const doi_avg = tSales>0 ? (avgInv/tSales)*tDays : 0;
+    // إيراد من الفواتير
+    const rev = idx.reduce((s,i)=>s+COIL_REV[i],0);
+    const invQty = idx.reduce((s,i)=>s+COIL_REV[i]/COIL_PRICE[i],0);
+    const cogs_inv = invQty * COIL_COST_PER_TON;
+    const gp  = rev - cogs_inv;
+    const margin = rev>0 ? gp/rev*100 : 0;
+    const annualizedTurnover = turnover * (365/tDays);
+    return {tPurch,tSales,tTr,openInv,closeInv,avgInv,cogs_del,turnover,annualizedTurnover,doi_avg,rev,cogs_inv,gp,margin,tDays};
+  };
+
+  const pData = periods.map(p=>({...p, ...calcPeriod(p.idx)}));
+  const allIdx=[0,1,2,3,4,5,6,7,8];
+  const tot = calcPeriod(allIdx);
+
+  // Period Cards
+  document.getElementById('period-comparison-grid').innerHTML = `<div class="period-grid">` +
+    pData.map(p=>`
+    <div class="period-card" style="border-top:3px solid ${p.color}">
+      <h3 style="color:${p.color}">${p.label}</h3>
+      <div class="row"><span class="k">المشتريات (طن)</span><span class="v pos">+${p.tPurch.toFixed(0)}</span></div>
+      <div class="row"><span class="k">المبيعات/تسليم (طن)</span><span class="v neg">(${p.tSales.toFixed(0)})</span></div>
+      <div class="row"><span class="k">التحويلات (طن)</span><span class="v" style="color:${p.color}">↔${p.tTr.toFixed(0)}</span></div>
+      <div class="row"><span class="k">متوسط المخزون (طن)</span><span class="v warn">${p.avgInv.toFixed(0)}</span></div>
+      <div class="row"><span class="k">معدل الدوران الفعلي</span><span class="v ${p.turnover>1.2?'pos':p.turnover>0.6?'warn':'neg'}">${p.turnover.toFixed(2)}x</span></div>
+      <div class="row"><span class="k">معدل الدوران سنوي</span><span class="v ${p.annualizedTurnover>5?'pos':p.annualizedTurnover>3?'warn':'neg'}">${p.annualizedTurnover.toFixed(1)}x/سنة</span></div>
+      <div class="row"><span class="k">متوسط DOI (يوم)</span><span class="v ${p.doi_avg<15?'pos':p.doi_avg<45?'warn':'neg'}">${p.doi_avg.toFixed(0)}</span></div>
+      <div class="row"><span class="k">الإيراد (ر.س)</span><span class="v pos">${(p.rev/1e6).toFixed(2)} م</span></div>
+      <div class="row"><span class="k">هامش الربح الإجمالي</span><span class="v ${p.margin>25?'pos':p.margin>15?'warn':'neg'}">${p.margin.toFixed(1)}%</span></div>
+    </div>`).join('') + `</div>`;
+
+  // Comparison Table
+  const metrics = [
+    {lbl:'المشتريات (طن)',     fn:p=>'+'+p.tPurch.toFixed(0),  cls:'pos'},
+    {lbl:'المبيعات / تسليم (طن)',fn:p=>'('+p.tSales.toFixed(0)+')',cls:'neg'},
+    {lbl:'متوسط المخزون (طن)', fn:p=>p.avgInv.toFixed(0),      cls:'warn'},
+    {lbl:'تكلفة المبيعات (ر.س)',fn:p=>fmt(Math.round(p.cogs_del)),cls:'neg'},
+    {lbl:'معدل الدوران',       fn:p=>p.turnover.toFixed(2)+'x', cls:p=>p.turnover>1.2?'pos':p.turnover>0.6?'warn':'neg'},
+    {lbl:'معدل الدوران سنوي',  fn:p=>p.annualizedTurnover.toFixed(1)+'x', cls:p=>p.annualizedTurnover>5?'pos':p.annualizedTurnover>3?'warn':'neg'},
+    {lbl:'متوسط DOI (يوم)',    fn:p=>p.doi_avg.toFixed(0)+' يوم', cls:p=>p.doi_avg<15?'pos':p.doi_avg<45?'warn':'neg'},
+    {lbl:'الإيراد (ر.س)',      fn:p=>fmt(Math.round(p.rev)),    cls:'pos'},
+    {lbl:'تكلفة الفاتورة (ر.س)',fn:p=>fmt(Math.round(p.cogs_inv)),cls:'neg'},
+    {lbl:'الربح الإجمالي (ر.س)',fn:p=>fmt(Math.round(p.gp)),    cls:p=>p.gp>0?'pos':'neg'},
+    {lbl:'هامش الربح الإجمالي',fn:p=>p.margin.toFixed(1)+'%',  cls:p=>p.margin>25?'pos':p.margin>15?'warn':'neg'},
+  ];
+  document.getElementById('tbody-periods').innerHTML = metrics.map(m=>{
+    const cells = [...pData, tot].map(p=>{
+      const cls = typeof m.cls==='function' ? m.cls(p) : m.cls;
+      return `<td><span class="num ${cls}">${m.fn(p)}</span></td>`;
+    }).join('');
+    return `<tr><td class="lft">${m.lbl}</td>${cells}</tr>`;
+  }).join('');
+}
+
+// ── CSV Export ──
+function exportCoilsCSV(){
+  const BOM = '﻿';
+  const sep = ',';
+  const nl  = '\r\n';
+  let csv = BOM;
+
+  // ─ Header
+  csv += `تحليل الكويلات — كويلات حديد تسليح${nl}`;
+  csv += `تاريخ التصدير: ${new Date().toLocaleDateString('ar-SA')} · المصدر: ERP MekSoftDb1${nl}${nl}`;
+
+  // ─ Section 1: Monthly Inventory Ledger
+  csv += `=== دفتر حركة المخزون الشهرية ===${nl}`;
+  csv += ['الشهر','رصيد الافتتاح (طن)','مشتريات (طن)','مبيعات/تسليم (طن)','تحويلات (طن)','تسويات (طن)',
+          'رصيد الإغلاق (طن)','تكلفة المبيعات (ر.س)','متوسط المخزون (ر.س)','معدل الدوران','فترة التخزين (يوم)'].join(sep)+nl;
+  COIL_LEDGER.forEach((r,i)=>{
+    const avgInv    = (r.open+r.close)/2;
+    const cogs_sar  = r.sales * COIL_COST_PER_TON;
+    const avgInvVal = avgInv  * COIL_COST_PER_TON;
+    const turnover  = avgInvVal>0 ? cogs_sar/avgInvVal : 0;
+    const doi       = cogs_sar>0 ? (avgInvVal/cogs_sar)*r.days : 0;
+    csv += [r.mo, r.open.toFixed(2), r.purch.toFixed(2), r.sales.toFixed(2), r.tr_iss.toFixed(2),
+            r.adj.toFixed(2), r.close.toFixed(2), Math.round(cogs_sar), Math.round(avgInvVal),
+            turnover.toFixed(3), doi.toFixed(1)].join(sep)+nl;
+  });
+  csv += nl;
+
+  // ─ Section 2: Revenue & Margin
+  csv += `=== تحليل الإيراد والهامش الشهري ===${nl}`;
+  csv += ['الشهر','الإيراد (ر.س)','كمية الفاتورة (طن)','سعر البيع (ر.س/طن)','تكلفة المبيعات (ر.س)','ربح إجمالي (ر.س)','هامش %','ربح/طن (ر.س)'].join(sep)+nl;
+  COIL_LEDGER.forEach((r,i)=>{
+    const rev=COIL_REV[i]||0, price=COIL_PRICE[i]||1;
+    const invQty=rev/price, cogs=invQty*COIL_COST_PER_TON, gp=rev-cogs;
+    const margin=rev>0?gp/rev*100:0, gpPerTon=invQty>0?gp/invQty:0;
+    csv += [r.mo, Math.round(rev), invQty.toFixed(1), price, Math.round(cogs),
+            Math.round(gp), margin.toFixed(2)+'%', Math.round(gpPerTon)].join(sep)+nl;
+  });
+  csv += nl;
+
+  // ─ Section 3: Item Breakdown
+  csv += `=== تحليل الحركة حسب الصنف ===${nl}`;
+  csv += ['الصنف','مخزون الافتتاح (طن)','إجمالي الاستلام (طن)','إجمالي التسليم (طن)','تسويات',
+          'مخزون حالي (طن)','تكلفة المبيعات (ر.س)','متوسط المخزون (ر.س)','معدل الدوران'].join(sep)+nl;
+  COIL_ITEMS_DATA.forEach(c=>{
+    const avgQty=((c.open+c.current)/2)||0.5;
+    const cogs_sar=c.deliver*COIL_COST_PER_TON, avgInvVal=avgQty*COIL_COST_PER_TON;
+    const turnX=avgInvVal>0?cogs_sar/avgInvVal:0;
+    csv += [c.name, c.open, c.receipt.toFixed(2), c.deliver.toFixed(2), c.adj.toFixed(2),
+            c.current.toFixed(2), Math.round(cogs_sar), Math.round(avgInvVal), turnX.toFixed(2)].join(sep)+nl;
+  });
+  csv += nl;
+
+  // ─ Section 4: Manufacturing Analysis
+  csv += `=== تحليل التصنيع — مصنع حوراء ===${nl}`;
+  csv += ['الشهر','مدخلات كويلات (طن)','إنتاج متوقع (طن)','هدر (طن)','تكلفة مواد (ر.س)','تكلفة تحويل (ر.س)','إجمالي تكلفة (ر.س)','معدل يومي (ط/يوم)','أوامر إنتاج'].join(sep)+nl;
+  MFG_MONTHLY.forEach(r=>{
+    csv += [r.mo, r.input.toFixed(2), r.output.toFixed(2), r.waste.toFixed(2),
+            Math.round(r.matCost), Math.round(r.convCost), Math.round(r.totalCost),
+            r.dailyRate.toFixed(2), r.orders].join(sep)+nl;
+  });
+  csv += nl;
+
+  // ─ Section 5: Forecast (current scenario)
+  csv += `=== التوقعات — ${currentScenario} ===${nl}`;
+  csv += ['الشهر','الطلب المتوقع (طن)','احتياج الشراء (طن)','تكلفة تقديرية (ر.س)','إيراد متوقع (ر.س)','ربح متوقع (ر.س)','هامش %'].join(sep)+nl;
+  const factors={cons:0.80,base:1.00,opt:null};
+  let cumStock=60.5;
+  COIL_FORECAST_MONTHS.forEach((mo,i)=>{
+    const demand=Math.round((currentScenario==='opt'?COIL_3MA*COIL_SEASONAL[i]:COIL_3MA*(factors[currentScenario]||1)*COIL_SEASONAL[i])*10)/10;
+    const need=Math.max(0,demand-cumStock);
+    const cost=need*COIL_AVG_COST, rev=demand*COIL_AVG_PRICE, marg=rev-demand*COIL_AVG_COST;
+    cumStock=cumStock+need-demand;
+    csv += [mo, demand, need.toFixed(0), Math.round(cost), Math.round(rev), Math.round(marg), (marg/rev*100).toFixed(2)+'%'].join(sep)+nl;
+  });
+
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'coils-analysis-2026.csv';
+  a.click();
+}
+
+// ── Manufacturing Analysis ──
+// مدخلات التصنيع = التحويلات الصادرة (tr_iss) من المخزون الرئيسي إلى مصنع حوراء
+// مؤكد: 76 سجل RawMaterialIssue في ERP (أكتوبر 2025 – يونيو 2026)
+const MFG_EFF          = 0.97;   // كفاءة التحويل: 97% (3% هدر درفلة وتقطيع)
+const MFG_CONV_COST    = 350;    // تكلفة تحويل تقديرية (ر.س/طن) — أجور + طاقة + معدات
+const MFG_TOTAL_ORDERS = 184;    // آخر رقم أمر إنتاج موثق في RawMaterialIssue
+
+const MFG_MONTHLY = (() => {
+  const tTr = COIL_LEDGER.reduce((s,r)=>s+r.tr_iss, 0);
+  return COIL_LEDGER.map(r => {
+    const input       = r.tr_iss;
+    const matCost     = input * COIL_COST_PER_TON;
+    const convCost    = input * MFG_CONV_COST;
+    const totalCost   = matCost + convCost;
+    const output      = parseFloat((input * MFG_EFF).toFixed(2));
+    const waste       = parseFloat((input * (1-MFG_EFF)).toFixed(2));
+    const dailyRate   = r.days > 0 ? input / r.days : 0;
+    const orders      = tTr > 0 ? Math.max(1, Math.round(input / tTr * MFG_TOTAL_ORDERS)) : 0;
+    return {mo:r.mo, short:r.short, days:r.days, input, matCost, convCost, totalCost, output, waste, dailyRate, orders};
+  });
+})();
+
+// توزيع تقديري للكويلات في التصنيع بنسبة الحجم التسليمي لكل صنف
+const MFG_ITEMS_ALLOC = (() => {
+  const tTr    = COIL_LEDGER.reduce((s,r)=>s+r.tr_iss, 0);
+  const totDel = COIL_ITEMS_DATA.reduce((s,c)=>s+c.deliver, 0);
+  return COIL_ITEMS_DATA.map(c => {
+    const share    = totDel > 0 ? c.deliver / totDel : 0;
+    const mfgInput = parseFloat((share * tTr).toFixed(2));
+    const mfgOut   = parseFloat((mfgInput * MFG_EFF).toFixed(2));
+    const mfgWaste = parseFloat((mfgInput - mfgOut).toFixed(2));
+    const matCost  = mfgInput * COIL_COST_PER_TON;
+    const totCost  = matCost + mfgInput * MFG_CONV_COST;
+    return {name:c.name, color:c.color, share, mfgInput, mfgOut, mfgWaste, matCost, totCost};
+  });
+})();
+
+function buildMfgKPIs(){
+  const tInput   = MFG_MONTHLY.reduce((s,r)=>s+r.input, 0);
+  const tOutput  = MFG_MONTHLY.reduce((s,r)=>s+r.output, 0);
+  const tMatCost = MFG_MONTHLY.reduce((s,r)=>s+r.matCost, 0);
+  const tTotCost = MFG_MONTHLY.reduce((s,r)=>s+r.totalCost, 0);
+  const tWaste   = MFG_MONTHLY.reduce((s,r)=>s+r.waste, 0);
+  const peakMo   = MFG_MONTHLY.reduce((a,b)=>b.input>a.input?b:a);
+  document.getElementById('kpis-mfg').innerHTML=[
+    {lbl:'إجمالي مدخلات التصنيع',  val:tInput.toFixed(0)+' طن',       sub:'كويلات محوَّلة لمصنع حوراء', accent:'accent'},
+    {lbl:'إجمالي الإنتاج المتوقع', val:tOutput.toFixed(0)+' طن',       sub:'هدر: '+tWaste.toFixed(0)+' طن (97% كفاءة)', accent:'green'},
+    {lbl:'تكلفة المواد الخام',      val:(tMatCost/1e6).toFixed(2)+' م ر.س', sub:'× '+COIL_COST_PER_TON+' ر.س/طن', accent:'red'},
+    {lbl:'تكلفة الإنتاج الإجمالية',val:(tTotCost/1e6).toFixed(2)+' م ر.س', sub:'مواد + تحويل ('+MFG_CONV_COST+' ر.س/ط)', accent:'orange'},
+    {lbl:'ذروة الإنتاج',            val:peakMo.short,                    sub:peakMo.input.toFixed(0)+' طن مدخلات', accent:'purple'},
+    {lbl:'أوامر الإنتاج الموثقة',  val:MFG_TOTAL_ORDERS+' أمر',          sub:'من سجلات RawMaterialIssue ERP', accent:'accent'},
+    {lbl:'متوسط يومي للإنتاج',     val:(tInput/MFG_MONTHLY.slice(0,8).reduce((s,r)=>s+r.days,0)).toFixed(1)+' ط/يوم', sub:'متوسط 8 أشهر كاملة', accent:'green'},
+    {lbl:'تكلفة الإنتاج/طن',       val:fmt(Math.round(tTotCost/tOutput))+' ر.س',sub:'مواد + تحويل ÷ إنتاج نهائي', accent:'orange'},
+  ].map(k=>`<div class="kpi" data-accent="${k.accent}"><div class="lbl">${k.lbl}</div><div class="val">${k.val}</div><div class="sub">${k.sub}</div></div>`).join('');
+}
+
+function buildMfgTable(){
+  let tIn=0,tMat=0,tConv=0,tTot=0,tOut=0,tWaste=0,tOrders=0;
+  document.getElementById('tbody-mfg').innerHTML = MFG_MONTHLY.map((r,i)=>{
+    tIn+=r.input; tMat+=r.matCost; tConv+=r.convCost; tTot+=r.totalCost;
+    tOut+=r.output; tWaste+=r.waste; tOrders+=r.orders;
+    const partial = i===8?'<span style="font-size:.7rem;color:var(--muted)"> (4أ)</span>':'';
+    const volColor = r.input>350?'#4ada8e':r.input>150?'#f5a623':'var(--muted)';
+    const rateColor= r.dailyRate>12?'pos':r.dailyRate>6?'warn':'neg';
+    return `<tr>
+      <td class="lft"><strong>${r.mo}</strong>${partial}</td>
+      <td>
+        <span class="num" style="color:${volColor}">${r.input>0?r.input.toFixed(1):'—'}</span><br>
+        <span style="font-size:.72rem;color:${r.input>0?'#7a9ab8':'var(--muted)'};">${r.input>0?fmt(Math.round(r.matCost))+' ر.س':'—'}</span>
+      </td>
+      <td><span class="num pos">${r.output>0?r.output.toFixed(1):'—'}</span></td>
+      <td><span class="num neg">${r.waste>0?r.waste.toFixed(1):'—'}</span></td>
+      <td><span class="num neg">${r.matCost>0?fmt(Math.round(r.matCost)):'—'}</span></td>
+      <td><span class="num warn">${r.convCost>0?fmt(Math.round(r.convCost)):'—'}</span></td>
+      <td><span class="num" style="color:#e0a060">${r.totalCost>0?fmt(Math.round(r.totalCost)):'—'}</span></td>
+      <td><span class="${rateColor}">${r.dailyRate>0?r.dailyRate.toFixed(1):'—'}</span></td>
+      <td><span class="num" style="color:#a78bfa">${r.orders>0?r.orders:'—'}</span></td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('tfoot-mfg').innerHTML=`
+    <tr style="font-weight:700;background:#0d1a2a;border-top:2px solid var(--accent)">
+      <td class="lft">الإجمالي</td>
+      <td>
+        <span class="num accent">${tIn.toFixed(1)} طن</span><br>
+        <span style="font-size:.72rem;color:#6a8a9a">${fmt(Math.round(tMat))} ر.س</span>
+      </td>
+      <td><span class="num pos">${tOut.toFixed(1)} طن</span></td>
+      <td><span class="num neg">${tWaste.toFixed(1)} طن</span></td>
+      <td><span class="num neg">${fmt(Math.round(tMat))}</span></td>
+      <td><span class="num warn">${fmt(Math.round(tConv))}</span></td>
+      <td><span class="num" style="color:#e0a060">${fmt(Math.round(tTot))}</span></td>
+      <td></td>
+      <td><span class="num" style="color:#a78bfa">~${tOrders}</span></td>
+    </tr>`;
+}
+
+function buildMfgItemsTable(){
+  const tAlloc = MFG_ITEMS_ALLOC.reduce((s,c)=>s+c.mfgInput, 0);
+  let totIn=0,totOut=0,totWaste=0,totMat=0,totCost=0;
+  document.getElementById('tbody-mfg-items').innerHTML = MFG_ITEMS_ALLOC.map(c=>{
+    totIn+=c.mfgInput; totOut+=c.mfgOut; totWaste+=c.mfgWaste; totMat+=c.matCost; totCost+=c.totCost;
+    const pct = tAlloc>0 ? c.mfgInput/tAlloc*100 : 0;
+    const barW = Math.round(pct * 1.2);
+    return `<tr>
+      <td class="lft"><span style="color:${c.color};font-size:1.1em">●</span> <strong>${c.name}</strong></td>
+      <td>
+        <div style="display:flex;align-items:center;gap:6px">
+          <div style="background:${c.color};opacity:.5;border-radius:2px;height:8px;width:${barW}px"></div>
+          <span class="num">${pct.toFixed(1)}%</span>
+        </div>
+      </td>
+      <td><span class="num" style="color:${c.color}">${c.mfgInput.toFixed(1)}</span></td>
+      <td><span class="num pos">${c.mfgOut.toFixed(1)}</span></td>
+      <td><span class="num neg">${c.mfgWaste.toFixed(1)}</span></td>
+      <td><span class="num neg">${fmt(Math.round(c.matCost))}</span></td>
+      <td><span class="num warn">${fmt(Math.round(c.totCost))}</span></td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('tfoot-mfg-items').innerHTML=`
+    <tr style="font-weight:700;background:#0d1a2a;border-top:2px solid var(--accent)">
+      <td class="lft">الإجمالي</td>
+      <td><span class="num">100%</span></td>
+      <td><span class="num accent">${totIn.toFixed(1)}</span></td>
+      <td><span class="num pos">${totOut.toFixed(1)}</span></td>
+      <td><span class="num neg">${totWaste.toFixed(1)}</span></td>
+      <td><span class="num neg">${fmt(Math.round(totMat))}</span></td>
+      <td><span class="num warn">${fmt(Math.round(totCost))}</span></td>
+    </tr>`;
+}
+
+function buildMfgCharts(){
+  const labels = MFG_MONTHLY.map(r=>r.short);
+  const inputs  = MFG_MONTHLY.map(r=>r.input);
+  const outputs = MFG_MONTHLY.map(r=>r.output);
+  const wastes  = MFG_MONTHLY.map(r=>r.waste);
+
+  if(cMfgVol) cMfgVol.destroy();
+  cMfgVol = new Chart(document.getElementById('chart-mfg-volume'),{
+    type:'bar',
+    data:{labels, datasets:[
+      {label:'مدخلات (كويلات)',  data:inputs,  backgroundColor:'rgba(74,158,218,0.55)', borderColor:'#4a9eda', borderWidth:1},
+      {label:'إنتاج (حديد تسليح)',data:outputs, backgroundColor:'rgba(74,218,142,0.50)', borderColor:'#4ada8e', borderWidth:1},
+      {label:'هدر تصنيع',        data:wastes,  backgroundColor:'rgba(218,74,74,0.45)',   borderColor:'#da4a4a', borderWidth:1},
+    ]},
+    options:{...CHART_DEFAULTS,
+      scales:{...CHART_DEFAULTS.scales,
+        y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'طن',color:'#6a7d9a'}}
+      }
+    }
+  });
+
+  if(cMfgItems) cMfgItems.destroy();
+  cMfgItems = new Chart(document.getElementById('chart-mfg-items'),{
+    type:'doughnut',
+    data:{
+      labels: MFG_ITEMS_ALLOC.map(c=>c.name),
+      datasets:[{
+        data: MFG_ITEMS_ALLOC.map(c=>parseFloat(c.mfgInput.toFixed(1))),
+        backgroundColor: MFG_ITEMS_ALLOC.map(c=>c.color+'cc'),
+        borderColor: MFG_ITEMS_ALLOC.map(c=>c.color),
+        borderWidth:1,
+      }]
+    },
+    options:{
+      plugins:{
+        legend:{labels:{color:'#8aa8cc',font:{size:11}}},
+        tooltip:{callbacks:{label:ctx=>`${ctx.label}: ${ctx.parsed.toFixed(1)} طن (${(ctx.parsed/MFG_ITEMS_ALLOC.reduce((s,c)=>s+c.mfgInput,0)*100).toFixed(1)}%)`}}
+      }
+    }
+  });
+}
+
+// ── INIT ──
+buildCoilKPIs();
+buildCoilLedger();
+buildCoilItemTable();
+buildRevMarginTable();
+buildPeriodSummary();
+buildMfgKPIs();
+buildMfgTable();
+buildMfgItemsTable();
+buildCoilForecastTable('base');
+setTimeout(()=>{ buildCharts(); buildMfgCharts(); },50);
+</script>
+</body>
+</html>
