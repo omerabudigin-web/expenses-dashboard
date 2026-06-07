@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>موازنة التدفقات النقدية</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&family=Cairo:wght@400;600;700&display=swap');
+  :root {
+    --primary:#1e2a4a; --primary-light:#1e3a5f;
+    --gold:#d4a017; --gold-dim:#a07810;
+    --green:#27ae60; --green-dim:#1a7a40;
+    --red:#e74c3c; --blue:#5baef0; --orange:#e67e22;
+    --text:#e8edf5; --text-dim:#8a9bb5;
+    --bg:#0d1b2a; --card:#162032; --card2:#1a2840;
+    --hist-bg:#162032; --hist-hdr:#182a46;
+    --fcast-bg:rgba(212,160,23,.06); --fcast-hdr:rgba(212,160,23,.18);
+    --partial-bg:rgba(255,200,50,.05);
+    --border:#1e3a5f; --shadow:0 4px 16px rgba(0,0,0,.4);
+    --oper-color:#27ae60; --inv-color:#e67e22; --fin-color:#5baef0;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:'Tajawal',sans-serif;direction:rtl;min-height:100vh}
+
+  /* ── Toolbar ── */
+  .toolbar{
+    background:var(--primary);border-bottom:2px solid var(--green);
+    padding:10px 20px;display:flex;align-items:center;gap:14px;
+    position:sticky;top:0;z-index:100;box-shadow:var(--shadow);
+  }
+  .brand{font-size:1.1rem;font-weight:800;color:var(--green);flex:1}
+  .brand small{display:block;font-size:.75rem;color:var(--text-dim);margin-top:1px}
+  .toolbar a,.toolbar button{
+    padding:6px 14px;border-radius:6px;font-family:'Tajawal',sans-serif;
+    font-size:.85rem;cursor:pointer;text-decoration:none;white-space:nowrap;border:none;
+  }
+  .btn-back{background:var(--primary-light);color:var(--text-dim);border:1px solid var(--border)!important}
+  .btn-back:hover{color:var(--text)}
+  .btn-gold{background:transparent;border:1px solid var(--gold)!important;color:var(--gold)}
+  .btn-gold:hover{background:var(--gold);color:#000}
+  .btn-print{background:transparent;border:1px solid var(--text-dim)!important;color:var(--text-dim)}
+
+  /* ── Filters ── */
+  .filters-bar{
+    background:var(--card);border-bottom:1px solid var(--border);
+    padding:10px 20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+  }
+  .filters-bar label{color:var(--text-dim);font-size:.85rem}
+  .filters-bar select,.filters-bar input[type=number]{
+    background:var(--primary);color:var(--text);border:1px solid var(--border);
+    border-radius:6px;padding:5px 10px;font-family:'Tajawal',sans-serif;font-size:.88rem;
+  }
+  .filters-bar input[type=number]{width:80px;text-align:center}
+  .scen-group{display:flex;gap:2px}
+  .scen-btn{
+    background:var(--primary);color:var(--text-dim);border:1px solid var(--border);
+    padding:5px 14px;border-radius:6px;font-family:'Tajawal',sans-serif;
+    font-size:.85rem;cursor:pointer;transition:all .15s;
+  }
+  .scen-btn.active{background:var(--green-dim);color:#fff;border-color:var(--green)}
+  .scen-btn:hover:not(.active){color:var(--text)}
+  .btn-refresh{
+    background:var(--green);color:#fff;border:none;border-radius:6px;
+    padding:6px 16px;font-family:'Tajawal',sans-serif;font-size:.9rem;font-weight:700;cursor:pointer;
+  }
+  .btn-refresh:hover{background:var(--green-dim)}
+  #cfb-status{color:var(--text-dim);font-size:.78rem;margin-right:auto}
+
+  /* ── Notice ── */
+  .notice-bar{
+    background:#1a2810;border:1px solid #3a5820;border-radius:8px;
+    margin:12px 20px 0;padding:10px 16px;font-size:.82rem;color:#90c070;display:none;
+  }
+
+  /* ── KPI Cards ── */
+  .kpis{
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(185px,1fr));
+    gap:12px;padding:16px 20px;
+  }
+  .kpi{
+    background:var(--card);border:1px solid var(--border);border-radius:10px;
+    padding:14px 16px;text-align:center;position:relative;overflow:hidden;
+  }
+  .kpi::before{content:'';position:absolute;top:0;right:0;left:0;height:3px;background:var(--green)}
+  .kpi.gold::before{background:var(--gold)}
+  .kpi.red ::before{background:var(--red)}
+  .kpi.blue::before{background:var(--blue)}
+  .kpi.oran::before{background:var(--orange)}
+  .kpi label{display:block;font-size:.75rem;color:var(--text-dim);margin-bottom:5px}
+  .kpi .val{font-size:1.3rem;font-weight:800;color:var(--green);font-family:'Cairo',sans-serif}
+  .kpi.gold .val{color:var(--gold)} .kpi.red .val{color:var(--red)}
+  .kpi.blue .val{color:var(--blue)} .kpi.oran .val{color:var(--orange)}
+  .kpi .sub{font-size:.71rem;color:var(--text-dim);margin-top:3px}
+
+  /* ── Main content ── */
+  .content{max-width:1500px;margin:0 auto;padding:16px 20px}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:16px}
+  .card-title{font-size:.9rem;color:#a0c4e8;font-weight:600;margin-bottom:12px}
+
+  /* ── Chart ── */
+  .chart-wrap{position:relative;height:290px}
+  .chart-legend{
+    display:flex;gap:18px;flex-wrap:wrap;margin-top:8px;
+    font-size:.77rem;color:var(--text-dim);padding:0 4px;
+  }
+
+  /* ── CF Statement Table ── */
+  .tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .cf-tbl{
+    border-collapse:collapse;font-size:.79rem;
+    table-layout:fixed;min-width:900px;width:100%;
+  }
+  .cf-tbl th{
+    background:var(--hist-hdr);color:var(--text-dim);
+    padding:8px 10px;white-space:nowrap;border-bottom:1px solid var(--border);
+    font-weight:500;text-align:center;
+  }
+  .cf-tbl th.row-label-th{text-align:right;min-width:220px;width:220px;position:sticky;right:0;z-index:5}
+  .cf-tbl td{
+    padding:7px 10px;border-bottom:1px solid rgba(30,58,95,.4);
+    color:#b0c8e0;white-space:nowrap;text-align:center;
+    font-variant-numeric:tabular-nums;
+  }
+  .cf-tbl td.row-label{
+    text-align:right;background:var(--hist-bg);color:var(--text);
+    position:sticky;right:0;z-index:4;font-size:.82rem;padding-right:14px;
+  }
+  .cf-tbl td.row-label.indent{padding-right:28px;color:var(--text-dim);font-size:.78rem}
+  .cf-tbl td.row-label.indent2{padding-right:42px;color:var(--text-dim);font-size:.77rem}
+
+  /* Section headers */
+  .cf-tbl tr.sec-header td{
+    background:#0c1e30;color:var(--text-dim);font-size:.76rem;font-weight:600;
+    border-top:2px solid var(--border);padding:5px 10px;
+  }
+  .cf-tbl tr.sec-header td.row-label{color:var(--text-dim)}
+
+  /* Section subtotals */
+  .cf-tbl tr.sec-total td{font-weight:700;border-top:1px solid var(--border)}
+  .cf-tbl tr.sec-total-oper td.row-label{color:var(--oper-color);background:rgba(39,174,96,.06)}
+  .cf-tbl tr.sec-total-oper td{background:rgba(39,174,96,.06)}
+  .cf-tbl tr.sec-total-inv  td.row-label{color:var(--inv-color);background:rgba(230,126,34,.06)}
+  .cf-tbl tr.sec-total-inv  td{background:rgba(230,126,34,.06)}
+  .cf-tbl tr.sec-total-fin  td.row-label{color:var(--fin-color);background:rgba(91,174,240,.06)}
+  .cf-tbl tr.sec-total-fin  td{background:rgba(91,174,240,.06)}
+
+  /* Grand totals */
+  .cf-tbl tr.net-change td{background:#0c2030;font-weight:700;border-top:2px solid var(--border);color:var(--text)}
+  .cf-tbl tr.cash-open  td{background:#0a1a28;color:var(--text-dim)}
+  .cf-tbl tr.cash-close td{background:#0c2030;font-weight:800;border-top:1px solid var(--border)}
+  .cf-tbl tr.cash-close td.row-label{color:var(--gold)}
+
+  /* Historical / Forecast column backgrounds */
+  .cf-tbl td.hist {background:var(--hist-bg)}
+  .cf-tbl td.fcast{background:var(--fcast-bg);color:#d8c080}
+  .cf-tbl td.partial{background:var(--partial-bg)}
+  .cf-tbl th.fcast{background:var(--fcast-hdr)}
+
+  /* Number coloring */
+  .pos{color:#4ade80}.neg{color:#f87171}.zero{color:#4a6a8a}
+
+  /* Forecast badge */
+  .badge-fcast{
+    display:inline-block;background:rgba(212,160,23,.15);color:var(--gold);
+    font-size:.66rem;border:1px solid rgba(212,160,23,.3);border-radius:3px;
+    padding:1px 4px;margin-left:3px;vertical-align:middle;
+  }
+  .badge-partial{
+    display:inline-block;background:rgba(200,160,32,.12);color:#c8a020;
+    font-size:.66rem;border:1px solid rgba(200,160,32,.25);border-radius:3px;
+    padding:1px 4px;margin-left:3px;vertical-align:middle;
+  }
+
+  /* ── Recommendations ── */
+  .recs-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:12px}
+  .rec{background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:13px 15px;border-right:4px solid var(--green)}
+  .rec.urgent  {border-right-color:var(--orange)}
+  .rec.critical{border-right-color:var(--red)}
+  .rec.positive{border-right-color:var(--green)}
+  .rec.info    {border-right-color:var(--blue)}
+  .rec-header{display:flex;align-items:center;gap:8px;margin-bottom:7px}
+  .rec-icon{font-size:1.2rem}
+  .rec-title{font-size:.87rem;font-weight:700;color:var(--text)}
+  .rec-priority{font-size:.64rem;font-weight:700;border-radius:10px;padding:2px 6px;margin-right:auto}
+  .rec.critical .rec-priority{background:rgba(231,76,60,.2);color:#f87171;border:1px solid rgba(231,76,60,.3)}
+  .rec.urgent   .rec-priority{background:rgba(230,126,34,.2);color:#fb923c;border:1px solid rgba(230,126,34,.3)}
+  .rec.positive .rec-priority{background:rgba(39,174,96,.2); color:#4ade80;border:1px solid rgba(39,174,96,.3)}
+  .rec.info     .rec-priority{background:rgba(91,174,240,.2);color:#7dd3fc;border:1px solid rgba(91,174,240,.3)}
+  .rec-body{font-size:.81rem;color:var(--text-dim);line-height:1.55}
+  .rec-body strong{color:var(--text)}
+
+  /* ── Method note ── */
+  .method-note{background:#0a1420;border:1px solid #1e3050;border-radius:8px;padding:11px 14px;font-size:.77rem;color:#6a8aa0;line-height:1.6;margin-top:12px}
+
+  /* ── Print ── */
+  @media print {
+    .toolbar,.filters-bar,.btn-refresh,.btn-back,.btn-gold,.btn-print,.chart-wrap{display:none!important}
+    body{background:#fff;color:#000}
+    .card{border:1px solid #ccc;box-shadow:none}
+    .cf-tbl td,.cf-tbl th{color:#000!important;background:#fff!important;border-color:#ccc!important}
+    .cf-tbl td.fcast{background:#fffbe6!important}
+    .cf-tbl tr.sec-total-oper td,.cf-tbl tr.sec-total-inv td,.cf-tbl tr.sec-total-fin td{background:#f5f5f5!important}
+    .cf-tbl tr.cash-close td{background:#eef!important}
+    .kpi{border:1px solid #ccc} .kpi .val{color:#000!important}
+    .rec{border:1px solid #ccc}
+  }
+</style>
+</head>
+<body>
+
+<!-- ── Toolbar ── -->
+<div class="toolbar">
+  <div class="brand">
+    <span id="cfb-company">—</span>
+    <small>قائمة التدفقات النقدية — فعلي وموازنة</small>
+  </div>
+  <a href="/" class="btn-back">← الرئيسية</a>
+  <a href="/budget.html" id="cfb-budget-link" class="btn-gold">P&L ▸</a>
+  <button onclick="window.print()" class="btn-print">🖨 طباعة</button>
+</div>
+
+<!-- ── Filters ── -->
+<div class="filters-bar">
+  <label>الشركة:</label>
+  <select id="cfb-db-select"></select>
+
+  <label>سيناريو الموازنة:</label>
+  <div class="scen-group">
+    <button class="scen-btn active" data-scen="conservative">محافظ</button>
+    <button class="scen-btn"        data-scen="optimistic">متفائل</button>
+    <button class="scen-btn"        data-scen="custom">مخصص</button>
+  </div>
+
+  <div id="cfb-custom-wrap" style="display:none;align-items:center;gap:8px">
+    <label>نمو%:</label>
+    <input type="number" id="cfb-growth" value="0"  min="-20" max="100" step="0.5">
+    <label>تكلفة%:</label>
+    <input type="number" id="cfb-cogs"   value=""   min="0"   max="100" step="0.5" placeholder="تلقائي">
+  </div>
+
+  <button class="btn-refresh" id="cfb-refresh">↺ تحديث</button>
+  <span id="cfb-status"></span>
+</div>
+
+<!-- ── Notice ── -->
+<div class="notice-bar" id="cfb-notice"></div>
+
+<!-- ── KPI Cards ── -->
+<div class="kpis" id="cfb-kpis"></div>
+
+<!-- ── Content ── -->
+<div class="content">
+
+  <!-- Chart -->
+  <div class="card">
+    <div class="card-title">📊 التدفقات النقدية الشهرية — فعلي وموازنة توقعية</div>
+    <div class="chart-wrap"><canvas id="cfb-chart"></canvas></div>
+    <div class="chart-legend">
+      <span style="color:var(--oper-color)">█ تشغيلية</span>
+      <span style="color:var(--inv-color)" >█ استثمارية</span>
+      <span style="color:var(--fin-color)" >█ تمويلية</span>
+      <span style="color:var(--gold)">─ الرصيد النقدي</span>
+      <span style="color:var(--text-dim)"> | تعبئة باهتة = توقعي</span>
+    </div>
+  </div>
+
+  <!-- CF Statement -->
+  <div class="card">
+    <div class="card-title">📋 قائمة التدفقات النقدية (الطريقة الغير مباشرة) — فعلي + موازنة 6 أشهر</div>
+    <div class="tbl-wrap">
+      <table class="cf-tbl" id="cfb-table"></table>
+    </div>
+  </div>
+
+  <!-- Recommendations -->
+  <div class="card">
+    <div class="card-title">💡 الوصايا المالية — تحسين إدارة التدفق النقدي</div>
+    <div class="recs-grid" id="cfb-recs"></div>
+    <div class="method-note" id="cfb-method"></div>
+  </div>
+
+</div>
+
+<script>
+/* ══════════════════════════════════════════════════════════════
+   موازنة التدفقات النقدية — cashflow-budget.html
+   ══════════════════════════════════════════════════════════════ */
+
+const fmt = v => v === 0 ? '—'
+  : v > 0
+    ? `<span class="pos">${v.toLocaleString('ar-SA',{maximumFractionDigits:0})}</span>`
+    : `<span class="neg">(${Math.abs(v).toLocaleString('ar-SA',{maximumFractionDigits:0})})</span>`;
+
+const fmtCash = v => v >= 0
+  ? `<span class="pos">${v.toLocaleString('ar-SA',{maximumFractionDigits:0})}</span>`
+  : `<span class="neg">(${Math.abs(v).toLocaleString('ar-SA',{maximumFractionDigits:0})})</span>`;
+
+const SAR = v => {
+  const a = Math.abs(v);
+  const s = v < 0 ? '(' : '';
+  const e = v < 0 ? ')' : '';
+  if (a >= 1e6) return s + (a/1e6).toFixed(2) + ' م' + e;
+  if (a >= 1e3) return s + (a/1e3).toFixed(1) + ' ك' + e;
+  return v.toLocaleString('ar-SA',{maximumFractionDigits:0});
+};
+
+/* ── State ── */
+let currentDb   = null;
+let currentScen = 'conservative';
+let cfbChart    = null;
+
+/* ── DB Init ── */
+async function initDbSelect() {
+  const cfg = await fetch('/api/config').then(r => r.json());
+  const sel = document.getElementById('cfb-db-select');
+  const urlDb = new URLSearchParams(location.search).get('db');
+  const nameMap = {};
+  await Promise.all(cfg.databases.map(async db => {
+    try { nameMap[db] = (await fetch(`/api/company-name?db=${db}`).then(r=>r.json())).name || db; }
+    catch { nameMap[db] = db; }
+  }));
+  cfg.databases.forEach(db => {
+    const o = document.createElement('option');
+    o.value = db; o.textContent = nameMap[db];
+    if (db === (urlDb || cfg.defaultDb)) o.selected = true;
+    sel.appendChild(o);
+  });
+  currentDb = sel.value;
+  document.getElementById('cfb-company').textContent = nameMap[currentDb] || currentDb;
+  const updateLink = db => {
+    document.getElementById('cfb-budget-link').href = `/budget.html?db=${encodeURIComponent(db)}`;
+  };
+  updateLink(currentDb);
+  sel.addEventListener('change', () => {
+    currentDb = sel.value;
+    document.getElementById('cfb-company').textContent = nameMap[currentDb] || currentDb;
+    updateLink(currentDb);
+    loadData();
+  });
+}
+
+/* ── Scenario buttons ── */
+document.querySelectorAll('.scen-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.scen-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentScen = btn.dataset.scen;
+    document.getElementById('cfb-custom-wrap').style.display =
+      currentScen === 'custom' ? 'flex' : 'none';
+    loadData();
+  });
+});
+document.getElementById('cfb-refresh').addEventListener('click', loadData);
+
+/* ── URL builder ── */
+function buildUrl() {
+  let url = `/api/cashflow?db=${encodeURIComponent(currentDb)}&scenario=${currentScen}`;
+  if (currentScen === 'custom') {
+    const g = parseFloat(document.getElementById('cfb-growth').value);
+    const c = document.getElementById('cfb-cogs').value;
+    if (!isNaN(g)) url += `&growth=${g}`;
+    if (c !== '')  url += `&cogs=${parseFloat(c)}`;
+  }
+  return url;
+}
+
+/* ── KPIs ── */
+function renderKpis(meta, all) {
+  const { currentCash, forecastNetOperatingCF, avgDso, cashRunwayMonths,
+          avgMonthlyOpex, cumOperating, cumInvesting, cumFinancing } = meta;
+  const rClass = cashRunwayMonths < 2 ? 'red' : cashRunwayMonths < 4 ? 'gold' : '';
+  const fClass = forecastNetOperatingCF >= 0 ? 'blue' : 'red';
+  document.getElementById('cfb-kpis').innerHTML = `
+    <div class="kpi ${currentCash<0?'red':''}">
+      <label>💰 الرصيد النقدي الحالي</label>
+      <div class="val">${SAR(currentCash)} ر.س</div>
+      <div class="sub">نقدية وبنوك</div>
+    </div>
+    <div class="kpi">
+      <label>⚙️ التشغيلي التراكمي (فعلي)</label>
+      <div class="val" style="color:var(--oper-color)">${SAR(cumOperating)} ر.س</div>
+      <div class="sub">من بداية الفترة</div>
+    </div>
+    <div class="kpi oran">
+      <label>🏗 الاستثماري التراكمي (فعلي)</label>
+      <div class="val">${SAR(cumInvesting)} ر.س</div>
+      <div class="sub">صافي توظيف الأصول</div>
+    </div>
+    <div class="kpi blue">
+      <label>🏦 التمويلي التراكمي (فعلي)</label>
+      <div class="val">${SAR(cumFinancing)} ر.س</div>
+      <div class="sub">قروض + تسهيلات + رأسمال</div>
+    </div>
+    <div class="kpi ${fClass}">
+      <label>📈 التشغيلي التوقعي (6 أشهر)</label>
+      <div class="val">${SAR(forecastNetOperatingCF)} ر.س</div>
+      <div class="sub">${forecastNetOperatingCF>=0?'توقعات إيجابية':'عجز متوقع'}</div>
+    </div>
+    <div class="kpi ${rClass}">
+      <label>🕐 تغطية النقدية</label>
+      <div class="val">${cashRunwayMonths>50?'∞':cashRunwayMonths.toFixed(1)} شهر</div>
+      <div class="sub">متوسط ${SAR(avgMonthlyOpex)} م.تشغيلي/شهر</div>
+    </div>
+  `;
+}
+
+/* ── CF Statement Table ── */
+function renderTable(historical, forecast) {
+  const all = [...historical, ...forecast];
+  const nH  = historical.length;
+  const tbl = document.getElementById('cfb-table');
+
+  /* ─ Header row ─ */
+  let hdr = `<thead><tr>
+    <th class="row-label-th">البيان</th>`;
+  all.forEach((m, i) => {
+    const cls = i >= nH ? 'fcast' : '';
+    const badge = i >= nH
+      ? '<span class="badge-fcast">توقعي</span>'
+      : m.isPartial ? '<span class="badge-partial">جزئي</span>' : '';
+    hdr += `<th class="${cls}">${badge}${m.label}</th>`;
+  });
+  hdr += `</tr></thead>`;
+
+  /* ─ Helper: one data row ─ */
+  const dataRow = (label, key, cls = '', labelCls = '', rowCls = '') => {
+    let r = `<tr class="${rowCls}"><td class="row-label ${labelCls}">${label}</td>`;
+    all.forEach((m, i) => {
+      const tdCls = i >= nH ? 'fcast' : m.isPartial ? 'partial' : 'hist';
+      r += `<td class="${tdCls}">${fmt(m[key] || 0)}</td>`;
+    });
+    r += `</tr>`;
+    return r;
+  };
+
+  /* ─ Subtotal row ─ */
+  const totalRow = (label, key, rowCls, labelCls = '') => {
+    let r = `<tr class="sec-total ${rowCls}"><td class="row-label ${labelCls}">${label}</td>`;
+    all.forEach((m, i) => {
+      const tdCls = i >= nH ? 'fcast' : m.isPartial ? 'partial' : 'hist';
+      r += `<td class="${tdCls}">${fmt(m[key] || 0)}</td>`;
+    });
+    r += `</tr>`;
+    return r;
+  };
+
+  /* ─ Cash row ─ */
+  const cashRow = (label, key, rowCls) => {
+    let r = `<tr class="${rowCls}"><td class="row-label">${label}</td>`;
+    all.forEach((m, i) => {
+      const tdCls = i >= nH ? 'fcast' : m.isPartial ? 'partial' : 'hist';
+      r += `<td class="${tdCls}">${fmtCash(m[key] || 0)}</td>`;
+    });
+    r += `</tr>`;
+    return r;
+  };
+
+  /* ─ Separator row ─ */
+  const secHeader = label => {
+    let r = `<tr class="sec-header"><td class="row-label">${label}</td>`;
+    all.forEach(() => r += `<td></td>`);
+    r += `</tr>`;
+    return r;
+  };
+
+  let body = `<tbody>`;
+
+  /* ──────────────── Section I: Operating ──────────────── */
+  body += secHeader('أولاً: التدفقات النقدية التشغيلية — Operating Cash Flows');
+  body += dataRow('صافي الربح (الخسارة)', 'netIncome', '', 'indent');
+  body += secHeader('تسويات رأس المال العامل:');
+  body += dataRow('تغير المخزون',              'δInventory', '', 'indent2');
+  body += dataRow('تغير الذمم المدينة (العملاء)', 'δAR',       '', 'indent2');
+  body += dataRow('تغير المديونيات الموظفين',    'δEmpRec',   '', 'indent2');
+  body += dataRow('تغير الأصول الجارية الأخرى', 'δOtherCA',  '', 'indent2');
+  body += dataRow('تغير الذمم الدائنة (الموردون)','δAP',      '', 'indent2');
+  body += dataRow('تغير الالتزامات الجارية الأخرى','δOtherPay','', 'indent2');
+  body += dataRow('تغير المصروفات المستحقة',    'δAccrued',  '', 'indent2');
+  body += totalRow('══ صافي التدفق التشغيلي', 'operatingCF', 'sec-total-oper');
+
+  /* ──────────────── Section II: Investing ──────────────── */
+  body += secHeader('ثانياً: التدفقات النقدية الاستثمارية — Investing Cash Flows');
+  body += dataRow('تغير الأصول الثابتة (شراء/بيع)', 'δFixedAssets', '', 'indent');
+  body += dataRow('تغير المشاريع قيد التنفيذ',       'δProjects',    '', 'indent');
+  body += totalRow('══ صافي التدفق الاستثماري', 'investingCF', 'sec-total-inv');
+
+  /* ──────────────── Section III: Financing ──────────────── */
+  body += secHeader('ثالثاً: التدفقات النقدية التمويلية — Financing Cash Flows');
+  body += dataRow('تغير التسهيلات المصرفية',     'δBankFacilities', '', 'indent');
+  body += dataRow('تغير القروض طويلة الأجل',     'δLTLoans',        '', 'indent');
+  body += dataRow('تغير رأس المال',               'δCapital',        '', 'indent');
+  body += dataRow('سحب / إضافة حسابات الشركاء', 'δPartners',       '', 'indent');
+  body += totalRow('══ صافي التدفق التمويلي', 'financingCF', 'sec-total-fin');
+
+  /* ──────────────── Reconciliation ──────────────── */
+  body += cashRow('صافي التغيير في النقدية', 'netCashChange', 'net-change');
+  body += cashRow('رصيد النقدية — بداية الشهر', 'openingCash', 'cash-open');
+  body += cashRow('رصيد النقدية — نهاية الشهر ══', 'closingCash', 'cash-close');
+
+  body += `</tbody>`;
+  tbl.innerHTML = hdr + body;
+}
+
+/* ── Chart ── */
+function renderChart(historical, forecast) {
+  const all  = [...historical, ...forecast];
+  const nH   = historical.length;
+  const labs = all.map(m => m.label);
+
+  const opacity = (base, i) => i < nH ? base : base * 0.4;
+  const operColors = all.map((_, i) => `rgba(39,174,96,${opacity(.75,i)})`);
+  const invColors  = all.map((_, i) => `rgba(230,126,34,${opacity(.7,i)})`);
+  const finColors  = all.map((_, i) => `rgba(91,174,240,${opacity(.7,i)})`);
+
+  if (cfbChart) cfbChart.destroy();
+  cfbChart = new Chart(document.getElementById('cfb-chart'), {
+    data: {
+      labels: labs,
+      datasets: [
+        { type:'bar', label:'تشغيلية',    data: all.map(m=>m.operatingCF), backgroundColor:operColors, order:2 },
+        { type:'bar', label:'استثمارية', data: all.map(m=>m.investingCF),  backgroundColor:invColors,  order:2 },
+        { type:'bar', label:'تمويلية',   data: all.map(m=>m.financingCF),  backgroundColor:finColors,  order:2 },
+        {
+          type:'line', label:'الرصيد النقدي',
+          data: all.map(m=>m.closingCash),
+          borderColor:'#d4a017', backgroundColor:'rgba(212,160,23,.08)',
+          borderWidth:2.5, pointRadius:3, pointBackgroundColor:'#d4a017',
+          fill:false, tension:0.3, yAxisID:'y2', order:1,
+        },
+      ],
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      interaction:{ mode:'index', intersect:false },
+      plugins:{
+        legend:{ labels:{ color:'#8a9bb5', font:{family:'Tajawal'}, boxWidth:14 } },
+        tooltip:{
+          rtl:true, titleFont:{family:'Tajawal'}, bodyFont:{family:'Tajawal'},
+          callbacks:{ label: ctx => ` ${ctx.dataset.label}: ${Math.round(ctx.parsed.y).toLocaleString('ar-SA')} ر.س` },
+        },
+      },
+      scales:{
+        x:{
+          stacked:true,
+          ticks:{ color:'#6a8aa0', font:{family:'Tajawal',size:11}, maxRotation:0 },
+          grid :{ color:'rgba(30,58,95,.4)' },
+        },
+        y:{
+          stacked:true, position:'right',
+          ticks:{ color:'#6a8aa0', font:{family:'Tajawal',size:10}, callback: v => SAR(v) },
+          grid :{ color:'rgba(30,58,95,.3)' },
+        },
+        y2:{
+          position:'left',
+          ticks:{ color:'#d4a017', font:{family:'Tajawal',size:10}, callback: v => SAR(v) },
+          grid :{ drawOnChartArea:false },
+        },
+      },
+    },
+  });
+}
+
+/* ── Recommendations ── */
+function renderRecs(historical, forecast, meta) {
+  const { currentCash, cashRunwayMonths, avgMonthlyOpex, forecastNetOperatingCF,
+          avgDso, avgDpo, currentAR, currentAP, cumInvesting } = meta;
+  const confirmed = historical.filter(m => !m.isPartial);
+  const avgRev = confirmed.length
+    ? confirmed.reduce((s,m)=>s+m.revenue,0)/confirmed.length : 0;
+
+  const recs = [];
+
+  /* 1 — Cash runway */
+  if (cashRunwayMonths < 2) {
+    recs.push({ cls:'critical', icon:'🚨', pri:'عاجل جداً', title:'خطر نقص السيولة',
+      body:`الرصيد النقدي <strong>${SAR(currentCash)} ر.س</strong> يكفي <strong>${cashRunwayMonths.toFixed(1)} شهر</strong> فقط. اتخذ إجراءً فورياً: تأجيل المدفوعات غير الإلزامية وتسريع التحصيل.` });
+  } else if (cashRunwayMonths < 3.5) {
+    recs.push({ cls:'urgent', icon:'⚠️', pri:'مهم', title:'احتياطي نقدي دون المستوى الآمن',
+      body:`التغطية النقدية <strong>${cashRunwayMonths.toFixed(1)} شهر</strong> (الهدف 3+ أشهر = ${SAR(avgMonthlyOpex*3)} ر.س). بناء احتياطي عبر تسريع التحصيل.` });
+  } else {
+    recs.push({ cls:'positive', icon:'✅', pri:'إيجابي', title:'وضع نقدي مريح',
+      body:`تغطية <strong>${cashRunwayMonths.toFixed(1)} شهر</strong> — أفضل من المعدل. فرصة توجيه الفائض نحو سداد ديون مكلفة أو زيادة مخزون بسعر تنافسي.` });
+  }
+
+  /* 2 — Operating CF trend */
+  const lastThreeOper = confirmed.slice(-3).map(m=>m.operatingCF);
+  const operTrend = lastThreeOper.length >= 2
+    ? lastThreeOper[lastThreeOper.length-1] - lastThreeOper[0] : 0;
+  if (confirmed.length >= 2) {
+    const negOperMonths = confirmed.filter(m=>m.operatingCF < 0).length;
+    if (negOperMonths >= 2) {
+      recs.push({ cls:'critical', icon:'📉', pri:'عاجل', title:'تدفق تشغيلي سالب متكرر',
+        body:`<strong>${negOperMonths} أشهر</strong> من ${confirmed.length} تُظهر تدفقاً تشغيلياً سالباً — الشركة تستهلك نقديتها. مراجعة هيكل التكاليف الثابتة ضرورية.` });
+    }
+  }
+
+  /* 3 — AR / DSO */
+  if (avgDso > 60) {
+    recs.push({ cls:'urgent', icon:'📋', pri:'مهم', title:'DSO مرتفع — تجميد في الذمم المدينة',
+      body:`متوسط أيام التحصيل <strong>${avgDso.toFixed(0)} يوم</strong> و الذمم المدينة <strong>${SAR(currentAR)} ر.س</strong>. تخفيض DSO إلى 35 يوم يحرر <strong>${SAR(currentAR * 0.35)} ر.س</strong> سيولة فورية.` });
+  } else if (avgDso > 35) {
+    recs.push({ cls:'urgent', icon:'⏱', pri:'مهم', title:'تحسين دورة التحصيل',
+      body:`DSO = <strong>${avgDso.toFixed(0)} يوم</strong>. خصم 1.5% لسداد ≤ 15 يوم يُعجّل تدفق الذمم. الهدف: ≤ 30 يوم.` });
+  }
+
+  /* 4 — DPO */
+  if (avgDpo < 15 && currentAP > 50000) {
+    recs.push({ cls:'urgent', icon:'🤝', pri:'مهم', title:'السداد للموردين أسرع من اللازم',
+      body:`DPO = <strong>${avgDpo.toFixed(0)} يوم</strong> فقط. التفاوض على آجال 30-45 يوم يضاعف السيولة التشغيلية دون أي تكلفة — يوفر تقريباً <strong>${SAR(currentAP * 1.5)} ر.س</strong> متاحة.` });
+  } else if (avgDpo >= 30) {
+    recs.push({ cls:'positive', icon:'📅', pri:'إيجابي', title:'شروط موردين جيدة',
+      body:`DPO = <strong>${avgDpo.toFixed(0)} يوم</strong> — استغلال جيد للائتمان التجاري. الحفاظ على هذه الشروط وعدم الدفع مبكراً إلا مقابل خصم يتجاوز 1.5%.` });
+  }
+
+  /* 5 — Investing */
+  if (cumInvesting < -200000) {
+    recs.push({ cls:'info', icon:'🏗', pri:'معلومة', title:'استثمار في الأصول',
+      body:`صافي التدفق الاستثماري <strong>(${SAR(Math.abs(cumInvesting))}) ر.س</strong> — يعكس شراء أصول خلال الفترة. تأكد من توافق هذه النفقات مع خطة التوسع وأنها لن تُجهد السيولة قصيرة الأجل.` });
+  }
+
+  /* 6 — Forecast */
+  if (forecastNetOperatingCF < 0) {
+    recs.push({ cls:'critical', icon:'🔴', pri:'عاجل', title:'توقعات تدفق تشغيلي سالبة',
+      body:`الموازنة تشير لعجز تشغيلي <strong>(${SAR(Math.abs(forecastNetOperatingCF))}) ر.س</strong> خلال 6 أشهر. تقليل التكاليف المتغيرة ورفع الإيراد ضرورة فورية.` });
+  } else {
+    recs.push({ cls:'positive', icon:'📈', pri:'إيجابي', title:'توقعات تشغيلية إيجابية',
+      body:`التدفق التشغيلي المتوقع للـ 6 أشهر: <strong>${SAR(forecastNetOperatingCF)} ر.س</strong>. توجيه الفائض نحو سداد ديون أو بناء احتياطي نقدي.` });
+  }
+
+  /* 7 — Inventory specific */
+  recs.push({ cls:'info', icon:'🏭', pri:'اقتراح', title:'استغلال المخزون المشترى بسعر منخفض',
+    body:'المخزون الحالي مشترى بأسعار تنافسية وسط توقعات بارتفاع الأسعار. تسريع الدوران يحوّل رأس المال المجمّد إلى تدفق نقدي ويتيح إعادة الشراء بهامش أعلى.' });
+
+  const priLabel = { critical:'عاجل جداً', urgent:'مهم', positive:'إيجابي', info:'اقتراح' };
+  document.getElementById('cfb-recs').innerHTML = recs.slice(0,7).map(r => `
+    <div class="rec ${r.cls}">
+      <div class="rec-header">
+        <span class="rec-icon">${r.icon}</span>
+        <span class="rec-title">${r.title}</span>
+        <span class="rec-priority">${r.pri}</span>
+      </div>
+      <div class="rec-body">${r.body}</div>
+    </div>`).join('');
+
+  /* Method note */
+  const excl = meta.budgetMeta?.excludedMonths || [];
+  document.getElementById('cfb-method').innerHTML =
+    `<strong>المنهجية:</strong> التدفقات الفعلية محسوبة بالطريقة <strong>الغير مباشرة</strong>: صافي الربح ± تغيرات رأس المال العامل (مخزون + ذمم مدينة/دائنة + التزامات) ± أصول ثابتة ± تمويل.
+    التوقعات: التدفق التشغيلي = صافي ربح الموازنة (رأس المال العامل مُفترَض ثابت في المدى القصير)، الاستثماري والتمويلي = صفر (لا توجد خطة رأسمالية مُعلنة).
+    ${excl.length ? `أشهر مستثناة من الموازنة: <strong>${excl.join(' ، ')}</strong>.` : ''}`;
+}
+
+/* ── Notice ── */
+function renderNotice(meta) {
+  const excl = meta?.budgetMeta?.excludedMonths || [];
+  const el = document.getElementById('cfb-notice');
+  if (excl.length) {
+    el.textContent = `ℹ️ أشهر مستثناة من تحليل الاتجاه: ${excl.join(' ، ')} — تُعرض في القائمة لكن لا تؤثر في التوقعات.`;
+    el.style.display = 'block';
+  } else {
+    el.style.display = 'none';
+  }
+}
+
+/* ── Main Load ── */
+async function loadData() {
+  const status = document.getElementById('cfb-status');
+  status.textContent = 'جارٍ التحميل…';
+  try {
+    const data = await fetch(buildUrl()).then(r => r.json());
+    if (data.error) throw new Error(data.error);
+    const { historical, forecast, meta } = data;
+    renderKpis(meta, [...historical, ...forecast]);
+    renderChart(historical, forecast);
+    renderTable(historical, forecast);
+    renderNotice(meta);
+    renderRecs(historical, forecast, meta);
+    status.textContent = `آخر تحديث: ${new Date().toLocaleTimeString('ar-SA')}`;
+  } catch (err) {
+    status.textContent = '⚠ ' + err.message;
+    console.error('[cashflow-budget]', err);
+  }
+}
+
+/* ── Bootstrap ── */
+initDbSelect().then(loadData);
+setInterval(loadData, 60000);
+</script>
+</body>
+</html>

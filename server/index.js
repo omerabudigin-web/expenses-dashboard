@@ -15,6 +15,10 @@ const { getICPLElimination, getICBSElimination }              = require('./queri
 const { getPLComparisonData, getAdjDetail }                   = require('./queries/pl-comparison');
 const { getTrialBalance, getBranchList }                      = require('./queries/trial-balance');
 const { getIncomeStatement, getIncomeStatementTree }           = require('./queries/income-statement');
+const { getCashSales }                                         = require('./queries/cash-sales');
+const { getBudget }                                            = require('./queries/budget');
+const { getCashFlowBudget }                                    = require('./queries/cashflow');
+const { getAgingData }                                         = require('./queries/aging');
 
 const app        = express();
 const PORT       = parseInt(process.env.PORT, 10)             || 3001;
@@ -554,6 +558,82 @@ app.get('/api/income-statement-tree', async (req, res) => {
     res.json(rows);
   } catch (err) {
     console.error('[api/income-statement-tree]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /api/company-name?db= ─────────────────────────────────────────────────
+app.get('/api/company-name', async (req, res) => {
+  const dbName = resolveDb(req.query);
+  try {
+    const name = await getCompanyName(dbName);
+    res.json({ db: dbName, name });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /api/cash-sales?db=&from=&to= ─────────────────────────────────────────
+app.get('/api/cash-sales', async (req, res) => {
+  const dbName = resolveDb(req.query);
+  const from   = req.query.from || START_DATE;
+  const to     = req.query.to   || new Date().toISOString().slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to))
+    return res.status(400).json({ error: 'from and to must be YYYY-MM-DD' });
+  try {
+    const data = await getCashSales(dbName, { from, to });
+    res.json(data);
+  } catch (err) {
+    console.error('[api/cash-sales]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /api/budget?db=&scenario=conservative|optimistic|custom&growth=3&cogs=0.88 ──
+app.get('/api/budget', async (req, res) => {
+  const dbName   = resolveDb(req.query);
+  const SCENARIOS = ['conservative', 'optimistic', 'custom'];
+  const scenario  = SCENARIOS.includes(req.query.scenario) ? req.query.scenario : 'conservative';
+  const customGrowth = parseFloat(req.query.growth) || 0;
+  const customCogs   = req.query.cogs != null && req.query.cogs !== ''
+                       ? parseFloat(req.query.cogs) : null;
+  try {
+    const data = await getBudget(dbName, START_DATE, { scenario, customGrowth, customCogs });
+    res.json(data);
+  } catch (err) {
+    console.error('[api/budget]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /api/aging?db=&asOf=YYYY-MM-DD ────────────────────────────────────────
+app.get('/api/aging', async (req, res) => {
+  const dbName  = resolveDb(req.query);
+  const asOf    = /^\d{4}-\d{2}-\d{2}$/.test(req.query.asOf || '')
+    ? req.query.asOf
+    : new Date().toISOString().slice(0, 10);
+  try {
+    const data = await getAgingData(dbName, asOf);
+    res.json(data);
+  } catch (err) {
+    console.error('[api/aging]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /api/cashflow?db=&scenario=&growth=&cogs= ──────────────────────────────
+app.get('/api/cashflow', async (req, res) => {
+  const dbName   = resolveDb(req.query);
+  const SCENARIOS = ['conservative', 'optimistic', 'custom'];
+  const scenario  = SCENARIOS.includes(req.query.scenario) ? req.query.scenario : 'conservative';
+  const customGrowth = parseFloat(req.query.growth) || 0;
+  const customCogs   = req.query.cogs != null && req.query.cogs !== ''
+                       ? parseFloat(req.query.cogs) : null;
+  try {
+    const data = await getCashFlowBudget(dbName, START_DATE, { scenario, customGrowth, customCogs });
+    res.json(data);
+  } catch (err) {
+    console.error('[api/cashflow]', err.message);
     res.status(500).json({ error: err.message });
   }
 });

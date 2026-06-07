@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>الموازنة التقديرية</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&family=Cairo:wght@400;600;700&display=swap');
+
+  :root {
+    --primary:#1e2a4a; --primary-light:#1e3a5f; --gold:#d4a017; --gold-dim:#a07810;
+    --green:#27ae60; --red:#e74c3c; --text:#e8edf5; --text-dim:#8a9bb5;
+    --bg:#0d1b2a; --card:#162032; --card2:#1a2840;
+    --hist-bg:#162032; --hist-hdr:#1a2d4a;
+    --fcast-bg:rgba(212,160,23,.07); --fcast-hdr:rgba(212,160,23,.2);
+    --partial-bg:rgba(255,200,50,.06);
+    --border:#1e3a5f; --shadow:0 4px 16px rgba(0,0,0,.4);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:'Tajawal',sans-serif;min-height:100vh}
+
+  /* ── Toolbar ── */
+  .toolbar{
+    background:var(--primary);border-bottom:2px solid var(--gold);
+    padding:10px 20px;display:flex;align-items:center;gap:16px;
+    position:sticky;top:0;z-index:100;box-shadow:var(--shadow);
+  }
+  .brand{font-size:1.15rem;font-weight:800;color:var(--gold);flex:1}
+  .brand small{display:block;font-size:.75rem;font-weight:400;color:var(--text-dim);margin-top:2px}
+  .toolbar a,.toolbar button{
+    padding:6px 14px;border-radius:6px;font-family:'Tajawal',sans-serif;
+    font-size:.85rem;cursor:pointer;text-decoration:none;white-space:nowrap;
+  }
+  .btn-back{background:var(--primary-light);color:var(--text-dim);border:1px solid var(--border)}
+  .btn-back:hover{color:var(--text)}
+  .btn-print{background:transparent;border:1px solid var(--gold);color:var(--gold)}
+  .btn-print:hover{background:var(--gold);color:#000}
+
+  /* ── Filters bar ── */
+  .filters-bar{
+    background:var(--card);border-bottom:1px solid var(--border);
+    padding:10px 20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+  }
+  .filters-bar label{color:var(--text-dim);font-size:.85rem;white-space:nowrap}
+  .filters-bar select{
+    background:var(--primary);color:var(--text);border:1px solid var(--border);
+    border-radius:6px;padding:5px 10px;font-family:'Tajawal',sans-serif;font-size:.9rem;
+  }
+  .btn-refresh{
+    background:var(--gold);color:#000;border:none;border-radius:6px;
+    padding:6px 16px;font-family:'Tajawal',sans-serif;font-size:.9rem;
+    font-weight:700;cursor:pointer;
+  }
+  .btn-refresh:hover{background:var(--gold-dim);color:#fff}
+  #lastUpdated{color:var(--text-dim);font-size:.78rem;margin-right:auto}
+  #statusMsg{color:var(--gold);font-size:.8rem}
+
+  /* ── Print header (screen hidden) ── */
+  .print-header{display:none}
+
+  /* ── KPI cards ── */
+  .kpis{
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+    gap:14px;padding:18px 20px;
+  }
+  .kpi{
+    background:var(--card);border:1px solid var(--border);border-radius:10px;
+    padding:16px;text-align:center;position:relative;overflow:hidden;
+  }
+  .kpi::before{
+    content:'';position:absolute;top:0;right:0;left:0;height:3px;
+    background:var(--gold);
+  }
+  .kpi.green::before{background:var(--green)}
+  .kpi.red::before{background:var(--red)}
+  .kpi label{display:block;font-size:.78rem;color:var(--text-dim);margin-bottom:6px}
+  .kpi .val{font-size:1.45rem;font-weight:800;color:var(--gold);font-family:'Cairo',sans-serif}
+  .kpi.green .val{color:var(--green)}
+  .kpi.red .val{color:var(--red)}
+  .kpi small{display:block;font-size:.75rem;color:var(--text-dim);margin-top:4px}
+
+  /* ── Scenario selector ── */
+  .scen-group{display:flex;align-items:center;gap:0;background:var(--primary);border:1px solid var(--border);border-radius:7px;overflow:hidden}
+  .scen-btn{
+    background:transparent;color:var(--text-dim);border:none;border-left:1px solid var(--border);
+    padding:6px 14px;font-family:'Tajawal',sans-serif;font-size:.85rem;cursor:pointer;
+    transition:all .18s;white-space:nowrap;
+  }
+  .scen-btn:first-child{border-left:none}
+  .scen-btn:hover{background:rgba(212,160,23,.12);color:var(--text)}
+  .scen-btn.active{background:var(--gold);color:#000;font-weight:700}
+  .scen-btn.active.optimistic{background:#27ae60;color:#fff}
+  .scen-btn.active.custom{background:#3a6abf;color:#fff}
+  .custom-inputs{
+    display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+    background:rgba(58,106,191,.12);border:1px solid rgba(58,106,191,.3);
+    border-radius:6px;padding:6px 12px;
+  }
+  .custom-inputs label{font-size:.82rem;color:var(--text-dim)}
+  .custom-inputs input[type=number]{
+    background:var(--primary);color:var(--text);border:1px solid var(--border);
+    border-radius:5px;padding:4px 8px;width:80px;font-family:'Tajawal',sans-serif;font-size:.9rem;
+    text-align:center;
+  }
+  .scen-badge{
+    display:inline-block;font-size:.72rem;padding:2px 8px;border-radius:10px;
+    margin-right:6px;font-weight:700;vertical-align:middle;
+  }
+  .badge-cons{background:rgba(212,160,23,.15);color:var(--gold)}
+  .badge-opt{background:rgba(39,174,96,.15);color:#27ae60}
+  .badge-cust{background:rgba(58,106,191,.2);color:#6baaf8}
+
+  /* ── Chart ── */
+  .chart-wrap{
+    margin:0 20px 20px;background:var(--card);border:1px solid var(--border);
+    border-radius:10px;padding:16px;
+  }
+  .chart-wrap h3{font-size:.9rem;color:var(--text-dim);margin-bottom:12px}
+  #revenueChart{max-height:220px}
+
+  /* ── Legend ── */
+  .legend{
+    display:flex;gap:20px;align-items:center;padding:4px 20px 14px;
+    font-size:.82rem;color:var(--text-dim);
+  }
+  .legend-dot{display:inline-block;width:12px;height:12px;border-radius:2px;margin-left:6px;vertical-align:middle}
+  .d-hist{background:var(--hist-hdr)}
+  .d-partial{background:var(--partial-bg);border:1px solid var(--gold-dim)}
+  .d-fcast{background:var(--fcast-hdr)}
+
+  /* ── Table ── */
+  .table-wrap{overflow-x:auto;padding:0 20px 24px;-webkit-overflow-scrolling:touch}
+  table{
+    border-collapse:collapse;width:max-content;min-width:100%;
+    font-size:.82rem;
+  }
+  th,td{
+    padding:6px 12px;text-align:center;white-space:nowrap;
+    border-bottom:1px solid var(--border);
+  }
+  /* Label column */
+  .col-label{
+    text-align:right;padding-right:16px;padding-left:20px;min-width:180px;
+    position:sticky;right:0;z-index:2;font-family:'Cairo',sans-serif;
+    background:inherit;
+  }
+  th.col-label{background:var(--primary)}
+
+  /* Historical columns */
+  .col-hist{ background:var(--hist-bg) }
+  th.col-hist{ background:var(--hist-hdr); color:var(--text-dim); font-size:.75rem }
+  /* Forecast columns */
+  .col-fcast{ background:var(--fcast-bg) }
+  th.col-fcast{
+    background:var(--fcast-hdr);color:var(--gold);font-size:.75rem;
+    border-right:2px dashed var(--gold-dim);
+  }
+  td.col-fcast{ border-right:2px dashed var(--gold-dim) }
+  /* Partial */
+  .col-partial{
+    background:var(--partial-bg);
+    background-image:repeating-linear-gradient(
+      45deg,transparent,transparent 4px,rgba(212,160,23,.06) 4px,rgba(212,160,23,.06) 8px);
+  }
+  th.col-partial{color:rgba(212,160,23,.7)}
+
+  /* Row types */
+  tr.row-divider td{
+    background:var(--primary);color:var(--gold-dim);font-weight:700;
+    font-size:.78rem;padding:4px 16px;letter-spacing:.5px;
+  }
+  tr.row-bold td{font-weight:700}
+  tr.row-revenue td.col-label,tr.row-gp td.col-label,
+  tr.row-opex td.col-label,tr.row-net td.col-label{font-weight:700}
+  tr.row-revenue td.num{color:var(--gold)}
+  tr.row-gp td.num{color:#6ce5a0}
+  tr.row-net td.num.pos{color:var(--green)}
+  tr.row-net td.num.neg{color:var(--red)}
+  tr.row-margin td.num{color:var(--text-dim);font-style:italic}
+  tr.row-opex td.num{color:#e87070}
+
+  /* Totals row at bottom */
+  .total-row td{
+    font-weight:700;background:var(--primary);border-top:2px solid var(--border);
+  }
+
+  /* Negative number */
+  .neg{color:var(--red)!important}
+  .pos{color:var(--green)!important}
+
+  /* Header row */
+  thead th{
+    background:var(--primary);font-size:.78rem;color:var(--text-dim);
+    padding:8px 12px;font-weight:600;
+  }
+  thead th.col-label{font-size:.85rem;color:var(--text)}
+
+  /* ── Methodology note ── */
+  .method-note{
+    margin:0 20px 28px;background:var(--card);border:1px solid var(--border);
+    border-radius:8px;padding:14px 18px;font-size:.8rem;color:var(--text-dim);
+    line-height:1.8;
+  }
+  .method-note strong{color:var(--gold)}
+  .method-note h4{color:var(--text);margin-bottom:8px;font-size:.85rem}
+
+  /* ── Error ── */
+  .error-box{
+    margin:24px 20px;background:#2a1020;border:1px solid var(--red);
+    border-radius:8px;padding:16px;color:var(--red);font-size:.9rem;
+  }
+
+  /* ── Loading ── */
+  .loading{text-align:center;padding:60px;color:var(--text-dim);font-size:1rem}
+
+  /* ── Print ── */
+  @media print {
+    body{background:#fff;color:#000}
+    .toolbar,.filters-bar,.legend,.chart-wrap,.method-note{display:none!important}
+    .print-header{display:block;text-align:center;margin-bottom:16px}
+    .print-header h2{font-size:1.2rem;margin-bottom:4px}
+    .print-header p{font-size:.85rem;color:#666}
+    .table-wrap{overflow:visible;padding:0}
+    table{font-size:.72rem;width:100%!important}
+    th,td{padding:4px 6px}
+    .col-label{position:static;background:#f0f0f0!important;color:#000!important}
+    th{background:#e0e0e0!important;color:#000!important}
+    td{color:#000!important}
+    tr.row-divider td{background:#ccc!important;color:#333!important}
+    .col-fcast{background:#fff8e0!important}
+    .col-hist{background:#f5f5f5!important}
+    .neg{color:#c00!important}
+    .pos{color:#060!important}
+    print-color-adjust:exact;
+    -webkit-print-color-adjust:exact;
+    .kpis{display:flex;flex-wrap:wrap;gap:10px}
+    .kpi{border:1px solid #ccc;border-radius:4px;padding:8px}
+    .kpi .val{font-size:1.1rem;color:#000!important}
+  }
+</style>
+</head>
+<body>
+
+<!-- Toolbar -->
+<div class="toolbar">
+  <div class="brand">
+    <span>📊 الموازنة التقديرية</span>
+    <small id="brandCompany">جارٍ التحميل…</small>
+  </div>
+  <a href="/" class="btn-back">← الرئيسية</a>
+  <button class="btn-print" onclick="window.print()">🖨 طباعة</button>
+</div>
+
+<!-- Filters -->
+<div class="filters-bar">
+  <label>الشركة:</label>
+  <select id="dbSelect"></select>
+
+  <label style="margin-right:8px">السيناريو:</label>
+  <div class="scen-group">
+    <button class="scen-btn active" data-scen="conservative">📉 محافظ</button>
+    <button class="scen-btn optimistic" data-scen="optimistic">📈 متفائل</button>
+    <button class="scen-btn custom" data-scen="custom">✏️ مخصص</button>
+  </div>
+
+  <div class="custom-inputs" id="customInputs" style="display:none">
+    <label>نمو شهري %
+      <input type="number" id="growthPct" value="3" min="-20" max="50" step="0.5">
+    </label>
+    <label>نسبة التكلفة %
+      <input type="number" id="cogsRatioPct" placeholder="تلقائي" min="0" max="100" step="0.5">
+    </label>
+    <button class="btn-refresh" onclick="loadData()" style="padding:4px 12px">تطبيق</button>
+  </div>
+
+  <button class="btn-refresh" id="refreshBtn" onclick="loadData()">تحديث</button>
+  <span id="statusMsg"></span>
+  <span id="lastUpdated"></span>
+</div>
+
+<!-- Print header -->
+<div class="print-header">
+  <h2 id="printTitle">الموازنة التقديرية</h2>
+  <p id="printPeriod"></p>
+</div>
+
+<!-- KPI cards -->
+<div class="kpis" id="kpiArea">
+  <div class="loading">جارٍ تحميل البيانات…</div>
+</div>
+
+<!-- Chart -->
+<div class="chart-wrap">
+  <h3>📈 مسار الإيرادات وصافي الربح — فعلي وتقديري</h3>
+  <canvas id="revenueChart"></canvas>
+</div>
+
+<!-- Excluded months notice -->
+<div id="excludedNotice" style="display:none;margin:0 20px 10px;padding:9px 16px;background:rgba(212,160,23,.08);border:1px solid rgba(212,160,23,.3);border-radius:7px;font-size:.82rem;color:#c8a040;line-height:1.7"></div>
+
+<!-- Legend -->
+<div class="legend">
+  <span><span class="legend-dot d-hist"></span> فعلي</span>
+  <span><span class="legend-dot d-partial"></span> شهر جارٍ (جزئي)</span>
+  <span><span class="legend-dot d-fcast"></span> تقدير</span>
+</div>
+
+<!-- Table -->
+<div class="table-wrap" id="tableWrap">
+  <div class="loading">جارٍ بناء الموازنة…</div>
+</div>
+
+<!-- Methodology -->
+<div class="method-note">
+  <h4>🔬 منهجية التوقعات</h4>
+  <strong>الإيرادات:</strong> انحدار خطي (OLS) على الأشهر الفعلية المؤكدة — يعكس الاتجاه العام للنمو.<br>
+  <strong>تكلفة المبيعات:</strong> نسبة التكلفة الثابتة (إجمالي COGS ÷ إجمالي الإيرادات) مضروبةً في الإيرادات المتوقعة.<br>
+  <strong>مصروفات التشغيل:</strong> متوسط آخر 3 أشهر فعلية مؤكدة لكل فئة — يُلغي الشذوذات الشهرية.<br>
+  <strong>الشهر الجاري:</strong> يُعرض بيانات جزئية ولا يُدخل في حسابات الاتجاه.<br>
+  <em>هذه توقعات استرشادية مبنية على الأنماط التاريخية وتفترض استمرار الظروف الحالية.</em>
+</div>
+
+<script>
+/* ── Utilities ── */
+const fmt  = v => (+v||0).toLocaleString('ar-SA',{minimumFractionDigits:0,maximumFractionDigits:0});
+const fmt2 = v => (+v||0).toLocaleString('ar-SA',{minimumFractionDigits:0,maximumFractionDigits:0});
+const pct  = v => ((+v||0)*100).toFixed(1)+'%';
+const sign = v => v < 0 ? 'neg' : 'pos';
+
+/* ── State ── */
+let chartInst   = null;
+let lastData    = null;
+let curScenario = 'conservative';
+
+/* ── Scenario button wiring ── */
+document.querySelectorAll('.scen-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.scen-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    curScenario = btn.dataset.scen;
+    document.getElementById('customInputs').style.display =
+      curScenario === 'custom' ? 'flex' : 'none';
+    if (curScenario !== 'custom') loadData();
+  });
+});
+
+/* ── DB Selector init ── */
+async function initDbSelect() {
+  const [cfgRes, ...nameReqs] = await Promise.allSettled([
+    fetch('/api/config').then(r => r.json()),
+  ]);
+  const cfg = cfgRes.value || { databases: ['MekSoftDb1'], defaultDb: 'MekSoftDb1' };
+
+  const nameResults = await Promise.allSettled(
+    cfg.databases.map(db => fetch(`/api/company-name?db=${db}`).then(r=>r.json()))
+  );
+
+  const sel = document.getElementById('dbSelect');
+  cfg.databases.forEach((db, i) => {
+    const opt  = document.createElement('option');
+    opt.value  = db;
+    const name = nameResults[i]?.value?.name || db;
+    opt.textContent = name;
+    sel.appendChild(opt);
+  });
+
+  const urlDb = new URLSearchParams(location.search).get('db');
+  if (urlDb && cfg.databases.includes(urlDb)) sel.value = urlDb;
+  else sel.value = cfg.defaultDb;
+
+  sel.addEventListener('change', () => { updateBrand(); loadData(); });
+  updateBrand();
+}
+
+function selectedDb() { return document.getElementById('dbSelect').value; }
+
+function updateBrand() {
+  const sel  = document.getElementById('dbSelect');
+  const name = sel.options[sel.selectedIndex]?.textContent || selectedDb();
+  document.getElementById('brandCompany').textContent = name;
+  document.getElementById('printTitle').textContent   = 'الموازنة التقديرية — ' + name;
+}
+
+/* ── Row definitions ── */
+const ROWS = [
+  { key:'revenue',     label:'إجمالي المبيعات',            type:'money', cls:'row-revenue' },
+  { key:'cogs',        label:'تكلفة المبيعات',             type:'money', cls:'row-cogs'    },
+  { key:'grossProfit', label:'مجمل الربح',                 type:'money', cls:'row-gp'      },
+  { key:'grossMargin', label:'هامش المجمل %',              type:'pct',   cls:'row-margin'  },
+  { key:'__div1',      label:'▸ مصروفات التشغيل',         type:'divider' },
+  { key:'sal',         label:'رواتب وأجور',                type:'money'  },
+  { key:'rent',        label:'إيجارات',                    type:'money'  },
+  { key:'maint',       label:'صيانة وتشغيل',               type:'money'  },
+  { key:'sell',        label:'مبيعات وتسويق',              type:'money'  },
+  { key:'dist',        label:'توزيع ونقل',                 type:'money'  },
+  { key:'adm',         label:'مصروفات إدارية',             type:'money'  },
+  { key:'char',        label:'تبرعات وزكاة',               type:'money'  },
+  { key:'fin',         label:'مالية ومصرفية',              type:'money'  },
+  { key:'oth',         label:'مصروفات أخرى',               type:'money'  },
+  { key:'opex',        label:'إجمالي مصروفات التشغيل',     type:'money', cls:'row-opex'   },
+  { key:'netProfit',   label:'صافي الربح',                 type:'money', cls:'row-net'    },
+  { key:'netMargin',   label:'هامش الربح الصافي %',        type:'pct',   cls:'row-margin' },
+];
+
+/* ── Render KPI cards ── */
+function renderKpis(meta) {
+  const growthPct  = ((meta.revenueGrowthPct||0)*100).toFixed(1);
+  const growthSign = meta.revenueGrowthPct >= 0 ? '+' : '';
+  const fmPeriod   = meta.forecastMonths || 6;
+  const netSum     = meta.forecastTotalNet    || 0;
+  const revSum     = meta.forecastTotalRevenue || 0;
+  const netCls     = netSum >= 0 ? 'pos' : 'neg';
+
+  document.getElementById('kpiArea').innerHTML = `
+    <div class="kpi">
+      <label>إجمالي الإيرادات التقديرية ${scenBadge()}</label>
+      <div class="val">${fmt(revSum)}</div>
+      <small>مجموع ${fmPeriod} أشهر قادمة — ريال سعودي</small>
+    </div>
+    <div class="kpi${netSum < 0 ? ' red' : ''}">
+      <label>إجمالي صافي الربح التقديري</label>
+      <div class="val ${netCls}">${fmt(netSum)}</div>
+      <small>مجموع ${fmPeriod} أشهر قادمة — ريال سعودي</small>
+    </div>
+    <div class="kpi${meta.avgNetMargin < 0 ? ' red' : ''}">
+      <label>هامش الربح الصافي المتوقع</label>
+      <div class="val ${meta.avgNetMargin<0?'neg':''}">${pct(meta.avgNetMargin)}</div>
+      <small>متوسط الأشهر التقديرية</small>
+    </div>
+    <div class="kpi green">
+      <label>هامش المجمل المتوقع</label>
+      <div class="val">${pct(meta.avgGrossMargin)}</div>
+      <small>نسبة الربح من المبيعات</small>
+    </div>
+    <div class="kpi">
+      <label>اتجاه الإيرادات</label>
+      <div class="val ${meta.revenueGrowthPct>=0?'pos':'neg'}">${growthSign}${growthPct}%</div>
+      <small>التقدير مقابل المتوسط الفعلي الشهري</small>
+    </div>
+    <div class="kpi">
+      <label>أشهر فعلية في التحليل</label>
+      <div class="val">${meta.confirmedMonths||meta.histMonths}</div>
+      <small>مؤكدة (يُستبعد الشهر الجاري الجزئي)</small>
+    </div>
+  `;
+}
+
+/* ── Render budget table ── */
+function renderTable(historical, forecast, scen) {
+  const all = [...historical, ...forecast];
+  if (!all.length) { document.getElementById('tableWrap').innerHTML = '<div class="loading">لا توجد بيانات</div>'; return; }
+
+  const scenLabel = scen === 'optimistic' ? '📈 متفائل' : scen === 'custom' ? '✏️ مخصص' : '📉 محافظ';
+  let h = `<table><thead><tr>`;
+  h += `<th class="col-label">البند &nbsp;<small style="opacity:.55;font-weight:400">${scenLabel}</small></th>`;
+  all.forEach(m => {
+    let cls = m.isForecast ? 'col-fcast' : m.isPartial ? 'col-partial' : 'col-hist';
+    const tag = m.isPartial ? '<br><small style="font-size:.65rem;opacity:.7">جزئي</small>' :
+                m.isForecast ? '<br><small style="font-size:.65rem;opacity:.7">تقدير</small>' : '';
+    h += `<th class="${cls}">${m.label}${tag}</th>`;
+  });
+  h += `</tr></thead><tbody>`;
+
+  ROWS.forEach(row => {
+    if (row.type === 'divider') {
+      h += `<tr class="row-divider"><td class="col-label" colspan="${all.length+1}">${row.label}</td></tr>`;
+      return;
+    }
+
+    const cls = row.cls || '';
+    h += `<tr class="${cls}"><td class="col-label">${row.label}</td>`;
+    all.forEach(m => {
+      const colCls = m.isForecast ? 'col-fcast' : m.isPartial ? 'col-partial' : 'col-hist';
+      const v = m[row.key] || 0;
+      let display, numCls = 'num';
+      if (row.type === 'pct') {
+        display = pct(v);
+        numCls += v < 0 ? ' neg' : '';
+      } else {
+        display = fmt(v);
+        numCls += v < 0 ? ' neg' : '';
+      }
+      h += `<td class="${colCls} ${numCls}">${display}</td>`;
+    });
+    h += `</tr>`;
+  });
+
+  /* Totals row (sum of forecast months) */
+  h += `<tr class="total-row"><td class="col-label">إجمالي الفترة التقديرية</td>`;
+  all.forEach(m => {
+    const colCls = m.isForecast ? 'col-fcast' : m.isPartial ? 'col-partial' : 'col-hist';
+    if (!m.isForecast) { h += `<td class="${colCls}">—</td>`; return; }
+    const v = m.revenue || 0;
+    h += `<td class="${colCls} num ${sign(v)}">${fmt(v)}</td>`;
+  });
+  h += `</tr>`;
+
+  h += `</tbody></table>`;
+  document.getElementById('tableWrap').innerHTML = h;
+}
+
+/* ── Chart ── */
+function renderChart(historical, forecast) {
+  const histLabels  = historical.map(m => m.label);
+  const fcastLabels = forecast.map(m => m.label);
+  const labels = [...histLabels, ...fcastLabels];
+
+  const histRevArr  = historical.map(m => +(m.revenue||0).toFixed(0));
+  const fcastRevArr = forecast.map(m => +(m.revenue||0).toFixed(0));
+  const histNetArr  = historical.map(m => +(m.netProfit||0).toFixed(0));
+  const fcastNetArr = forecast.map(m => +(m.netProfit||0).toFixed(0));
+
+  /* Pad forecast data with nulls for historical slots and vice versa */
+  const histLen = historical.length;
+  const revenueHist  = [...histRevArr,  ...Array(forecast.length).fill(null)];
+  const revenueFcast = [...Array(histLen-1).fill(null), histRevArr[histLen-1]||null, ...fcastRevArr];
+  const netHist      = [...histNetArr,  ...Array(forecast.length).fill(null)];
+  const netFcast     = [...Array(histLen-1).fill(null), histNetArr[histLen-1]||null, ...fcastNetArr];
+
+  const ctx = document.getElementById('revenueChart').getContext('2d');
+  if (chartInst) chartInst.destroy();
+
+  chartInst = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'الإيرادات — فعلي',
+          data: revenueHist,
+          borderColor: '#d4a017', backgroundColor: 'rgba(212,160,23,.15)',
+          borderWidth: 2.5, pointRadius: 4, tension: .3, fill: false,
+        },
+        {
+          label: 'الإيرادات — تقدير',
+          data: revenueFcast,
+          borderColor: '#d4a017', borderDash: [6,4],
+          borderWidth: 2, pointRadius: 3, tension: .3, fill: false,
+          backgroundColor: 'transparent',
+        },
+        {
+          label: 'صافي الربح — فعلي',
+          data: netHist,
+          borderColor: '#27ae60', backgroundColor: 'rgba(39,174,96,.1)',
+          borderWidth: 2, pointRadius: 4, tension: .3, fill: false,
+        },
+        {
+          label: 'صافي الربح — تقدير',
+          data: netFcast,
+          borderColor: '#27ae60', borderDash: [6,4],
+          borderWidth: 2, pointRadius: 3, tension: .3, fill: false,
+          backgroundColor: 'transparent',
+        },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { labels: { color: '#8a9bb5', font: { family: 'Tajawal', size: 12 } } },
+        tooltip: {
+          rtl: true,
+          callbacks: {
+            label: ctx => ` ${ctx.dataset.label}: ${(ctx.parsed.y||0).toLocaleString('ar-SA',{maximumFractionDigits:0})} ر.س`,
+          },
+        },
+        annotation: {},
+      },
+      scales: {
+        x: {
+          ticks: { color:'#8a9bb5', font:{family:'Tajawal',size:11} },
+          grid:  { color:'rgba(30,58,95,.5)' },
+        },
+        y: {
+          ticks: {
+            color:'#8a9bb5', font:{family:'Tajawal',size:11},
+            callback: v => (v/1000).toFixed(0)+'K',
+          },
+          grid: { color:'rgba(30,58,95,.5)' },
+        },
+      },
+    },
+  });
+}
+
+/* ── Build API URL with scenario params ── */
+function buildBudgetUrl() {
+  const db  = selectedDb();
+  let url   = `/api/budget?db=${encodeURIComponent(db)}&scenario=${curScenario}`;
+  if (curScenario === 'custom') {
+    const g = parseFloat(document.getElementById('growthPct').value);
+    const c = document.getElementById('cogsRatioPct').value;
+    if (!isNaN(g)) url += `&growth=${g}`;
+    if (c !== '') url += `&cogs=${parseFloat(c)/100}`;
+  }
+  return url;
+}
+
+/* ── Scenario badge HTML ── */
+function scenBadge() {
+  if (curScenario === 'optimistic')
+    return `<span class="scen-badge badge-opt">📈 متفائل</span>`;
+  if (curScenario === 'custom') {
+    const g = document.getElementById('growthPct')?.value || '?';
+    return `<span class="scen-badge badge-cust">✏️ مخصص (${g}%/شهر)</span>`;
+  }
+  return `<span class="scen-badge badge-cons">📉 محافظ</span>`;
+}
+
+/* ── Main data load ── */
+async function loadData() {
+  const db = selectedDb();
+  document.getElementById('statusMsg').textContent = '⟳ جارٍ التحديث…';
+  try {
+    const res  = await fetch(buildBudgetUrl());
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    lastData   = data;
+
+    const { historical = [], forecast = [], meta = {} } = data;
+    const all = [...historical, ...forecast];
+
+    if (!all.length) {
+      document.getElementById('kpiArea').innerHTML   = '<div class="error-box">لا توجد بيانات كافية لبناء الموازنة.</div>';
+      document.getElementById('tableWrap').innerHTML = '';
+      return;
+    }
+
+    renderKpis(meta);
+    renderTable(historical, forecast, meta.scenario);
+    renderChart(historical, forecast);
+
+    /* Print period */
+    const firstMonth = historical[0]?.label  || '';
+    const lastFcast  = forecast[forecast.length-1]?.label || '';
+    document.getElementById('printPeriod').textContent =
+      `الفترة الفعلية: ${firstMonth} — ${historical[historical.length-1]?.label||''}  |  التقديرية: حتى ${lastFcast}`;
+
+    document.getElementById('statusMsg').textContent   = '';
+    document.getElementById('lastUpdated').textContent =
+      'آخر تحديث: ' + new Date().toLocaleTimeString('ar-SA');
+
+    /* Update methodology note */
+    updateMethodNote(meta);
+
+  } catch (err) {
+    document.getElementById('statusMsg').textContent = '';
+    document.getElementById('kpiArea').innerHTML =
+      `<div class="error-box">⚠ خطأ في تحميل البيانات: ${err.message}</div>`;
+  }
+}
+
+/* ── Update methodology note + excluded months notice ── */
+function updateMethodNote(meta) {
+  const cogsRatioPct = ((meta.avgCogsRatio||0)*100).toFixed(1);
+  const cleanN       = meta.cleanMonths || meta.confirmedMonths;
+  const excluded     = meta.excludedMonths || [];
+
+  /* Excluded notice */
+  const notice = document.getElementById('excludedNotice');
+  if (notice) {
+    if (excluded.length) {
+      notice.style.display = 'block';
+      notice.innerHTML =
+        `⚠️ <strong>تم استثناء ${excluded.length} شهر من التحليل تلقائياً</strong> بسبب قيم شاذة تؤثر على دقة التوقعات: ` +
+        `<strong>${excluded.join('، ')}</strong>. ` +
+        `(الشذوذ مبني على IQR لصافي الربح — يشمل الأشهر الاستثنائية إيجاباً وسلباً).<br>` +
+        `<span style="opacity:.75">تُعرض هذه الأشهر في جدول الأداء الفعلي لكنها لا تُستخدم في حسابات الاتجاه أو المتوسطات.</span>`;
+    } else {
+      notice.style.display = 'none';
+    }
+  }
+
+  const notes = {
+    conservative: `<strong>📉 محافظ:</strong> انحدار خطي (OLS) على ${cleanN} أشهر نظيفة (بعد استثناء الشذوذات). نسبة التكلفة: <strong>${cogsRatioPct}%</strong>`,
+    optimistic:   `<strong>📈 متفائل:</strong> انحدار خطي على آخر 3 أشهر نظيفة — يعكس الانتعاش الأخير + نسبة تكلفة محسّنة: <strong>${cogsRatioPct}%</strong>`,
+    custom:        `<strong>✏️ مخصص:</strong> نمو شهري مركّب بناءً على إدخالك. نسبة التكلفة: <strong>${cogsRatioPct}%</strong>`,
+  };
+  const el = document.querySelector('.method-note');
+  if (el) {
+    el.innerHTML = `<h4>🔬 منهجية التوقعات</h4>
+      <p style="margin-bottom:6px">${notes[meta.scenario] || notes.conservative}</p>
+      <p><strong>مصروفات التشغيل:</strong> وسيط (median) آخر 3 أشهر نظيفة — مقاوم للشذوذات الشهرية.</p>
+      <p style="margin-top:6px;opacity:.7"><em>هذه توقعات استرشادية مبنية على الأنماط التاريخية بعد تنقية البيانات.</em></p>`;
+  }
+}
+
+/* ── Bootstrap ── */
+initDbSelect().then(loadData);
+setInterval(loadData, 60000);
+</script>
+</body>
+</html>

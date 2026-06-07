@@ -18,6 +18,7 @@
   else if (name === 'trial')       renderTrialBalance();
   else if (name === 'is')          renderIncomeStatement();
   else if (name === 'safety')      renderSafetyInventory();
+  else if (name === 'aging')       renderAgingTab();
   else if (name === 'finmodel')    renderFinancialModel();
   else if (name === 'inventory')     renderInventoryAnalysis();
   else if (name === 'manufacturing') renderManufacturing();

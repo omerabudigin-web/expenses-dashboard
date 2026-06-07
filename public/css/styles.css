@@ -14,6 +14,11 @@ body{font-family:'Segoe UI',Tahoma,Arial,sans-serif;background:#0d1b2a;color:#c8
 .tabs{background:#0a1e30;border-bottom:1px solid #1e3a5f;padding:0 24px;display:flex;gap:2px;overflow-x:auto}
 .tab{padding:12px 20px;cursor:pointer;border-bottom:3px solid transparent;color:#7090b0;font-size:.88rem;white-space:nowrap;transition:all .2s}
 .tab:hover{color:#a0c4e8}.tab.active{color:#5baef0;border-bottom-color:#5baef0}
+a.tab-link{text-decoration:none;display:inline-block;border-right:1px solid #1e3a5f;margin-right:2px;padding-right:22px}
+a.tab-budget{border-right:2px solid #d4a017;color:#d4a017!important;font-weight:600}
+a.tab-budget:hover{background:rgba(212,160,23,.12)}
+a.tab-cfbudget{border-right:2px solid #27ae60;color:#27ae60!important;font-weight:600}
+a.tab-cfbudget:hover{background:rgba(39,174,96,.12)}
 .wrap{max-width:1400px;margin:0 auto;padding:22px 20px}
 .filters{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px;align-items:center}
 .filters label{font-size:.8rem;color:#7090b0}

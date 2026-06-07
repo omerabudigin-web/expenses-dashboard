@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>تقرير المبيعات النقدية — مؤسسة أبعاد الحديد التجارية</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --primary: #1e2a4a;
+  --primary-light: #2d3f6e;
+  --gold: #d4a017;
+  --gold-light: #f0c84a;
+  --green: #16a34a;
+  --surface: #f8fafc;
+  --border: #e2e8f0;
+  --text: #1e293b;
+  --text-muted: #64748b;
+  --radius: 12px;
+  --shadow: 0 4px 20px rgba(0,0,0,0.08);
+}
+html { scroll-behavior: smooth; }
+body {
+  font-family: 'Tajawal', Arial, sans-serif;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.6;
+  direction: rtl;
+  text-align: right;
+}
+h1, h2, h3 { font-family: 'Cairo', sans-serif; }
+
+/* ── TOOLBAR ── */
+.toolbar {
+  position: sticky; top: 0; z-index: 1000;
+  background: var(--primary);
+  padding: 10px 24px;
+  display: flex; align-items: center; gap: 12px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.2);
+}
+.toolbar-brand { font-family: 'Cairo', sans-serif; color: var(--gold); font-weight: 700; font-size: 15px; flex: 1; }
+.toolbar-brand span { color: rgba(255,255,255,0.7); font-weight: 400; font-size: 13px; margin-right: 8px; }
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 16px; border: none; border-radius: 8px;
+  font-family: 'Tajawal', sans-serif; font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: all 0.2s; white-space: nowrap;
+}
+.btn-gold   { background: var(--gold); color: var(--primary); }
+.btn-gold:hover { background: var(--gold-light); }
+.btn-white  { background: rgba(255,255,255,0.12); color: #fff; border: 1px solid rgba(255,255,255,0.25); }
+.btn-white:hover { background: rgba(255,255,255,0.2); }
+.btn-print  { background: var(--green); color: #fff; }
+.btn-print:hover { background: #15803d; }
+
+/* ── FILTERS ── */
+.filters-bar {
+  background: #fff; border-bottom: 1px solid var(--border);
+  padding: 14px 24px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+}
+.filter-group { display: flex; align-items: center; gap: 8px; }
+.filter-group label { color: var(--text-muted); font-size: 13px; white-space: nowrap; }
+.filter-group input[type="date"] {
+  border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px;
+  font-family: 'Tajawal', sans-serif; font-size: 13px; color: var(--text);
+  background: var(--surface); cursor: pointer;
+}
+.filter-group input:focus { outline: 2px solid var(--gold); outline-offset: 1px; }
+
+/* ── MAIN ── */
+.main { padding: 24px; max-width: 1100px; margin: 0 auto; }
+
+/* ── KPI CARDS ── */
+.kpi-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 28px; }
+.kpi-card {
+  background: #fff; border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 20px 24px; box-shadow: var(--shadow);
+  display: flex; flex-direction: column; gap: 6px;
+}
+.kpi-label { font-size: 12px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+.kpi-value { font-family: 'Cairo', sans-serif; font-size: 26px; font-weight: 800; color: var(--primary); }
+.kpi-sub   { font-size: 12px; color: var(--text-muted); }
+.kpi-card.gold { border-top: 4px solid var(--gold); }
+
+/* ── SECTION HEADERS ── */
+.section-title {
+  font-size: 15px; font-weight: 700; color: var(--primary);
+  border-bottom: 2px solid var(--border); padding-bottom: 10px; margin-bottom: 16px;
+  display: flex; align-items: center; gap: 8px;
+}
+.section-title::before { content: ''; width: 4px; height: 18px; background: var(--gold); border-radius: 2px; display: block; }
+
+/* ── TABLES ── */
+.table-wrap { overflow-x: auto; border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 32px; }
+table { width: 100%; border-collapse: collapse; background: #fff; }
+thead { background: var(--primary); color: #fff; }
+thead th {
+  padding: 12px 16px; font-family: 'Cairo', sans-serif; font-size: 13px; font-weight: 700;
+  white-space: nowrap; text-align: right;
+}
+tbody tr { border-bottom: 1px solid var(--border); transition: background 0.15s; }
+tbody tr:hover { background: #f1f5f9; }
+tbody td { padding: 11px 16px; font-size: 13px; white-space: nowrap; }
+.num { font-family: monospace; text-align: left; direction: ltr; }
+tfoot td { padding: 12px 16px; font-weight: 700; font-size: 13px; background: #f8fafc; border-top: 2px solid var(--border); }
+tfoot .num { font-family: 'Cairo', sans-serif; font-size: 14px; color: var(--primary); }
+
+/* ── LOADING / ERROR ── */
+.state-box {
+  background: #fff; border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 48px; text-align: center; color: var(--text-muted);
+}
+.state-box.error { color: #dc2626; border-color: #fecaca; background: #fef2f2; }
+.spinner { width: 36px; height: 36px; border: 3px solid var(--border); border-top-color: var(--gold); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 12px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── PRINT ── */
+@media print {
+  @page { size: A4; margin: 15mm 12mm; }
+  .toolbar, .filters-bar, .no-print { display: none !important; }
+  body { background: #fff; font-size: 12px; }
+  .main { padding: 0; max-width: 100%; }
+  .kpi-row { grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 18px; }
+  .kpi-card { box-shadow: none; border: 1px solid #ccc; padding: 12px 16px; }
+  .kpi-value { font-size: 20px; }
+  .table-wrap { box-shadow: none; }
+  thead { background: #1e2a4a !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  tbody tr:hover { background: transparent; }
+  tbody tr:nth-child(even) { background: #f8f8f8 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  tfoot { background: #f0f0f0 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .print-header { display: block !important; text-align: center; margin-bottom: 16px; }
+  .print-header h2 { font-size: 16px; color: #1e2a4a; }
+  .print-header p  { font-size: 12px; color: #666; margin-top: 4px; }
+}
+.print-header { display: none; }
+</style>
+</head>
+<body>
+
+<!-- TOOLBAR -->
+<div class="toolbar no-print">
+  <div class="toolbar-brand">
+    تقرير المبيعات النقدية
+    <span id="brandCompany"></span>
+  </div>
+  <a href="/" class="btn btn-white">← الرئيسية</a>
+  <button class="btn btn-print" onclick="window.print()">🖨 طباعة</button>
+</div>
+
+<!-- FILTERS -->
+<div class="filters-bar no-print">
+  <div class="filter-group">
+    <label>الشركة:</label>
+    <select id="dbSelect" style="border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-family:'Tajawal',sans-serif;font-size:13px;color:var(--text);background:var(--surface);cursor:pointer;"></select>
+  </div>
+  <div class="filter-group">
+    <label>من:</label>
+    <input type="date" id="dateFrom" value="2025-10-01">
+  </div>
+  <div class="filter-group">
+    <label>إلى:</label>
+    <input type="date" id="dateTo">
+  </div>
+  <button class="btn btn-gold" onclick="loadData()">تحديث</button>
+  <span id="lastUpdated" style="color:rgba(255,255,255,0.0);font-size:12px;margin-right:auto;"></span>
+</div>
+
+<!-- PRINT HEADER (visible only on print) -->
+<div class="print-header">
+  <h2 id="printTitle">تقرير المبيعات النقدية</h2>
+  <p id="printPeriod"></p>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+  <div id="content">
+    <div class="state-box"><div class="spinner"></div>جارٍ تحميل البيانات…</div>
+  </div>
+</div>
+
+<script>
+const fmt = (n, dec = 2) =>
+  Number(n || 0).toLocaleString('ar-SA', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+
+function today() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+document.getElementById('dateTo').value = today();
+
+async function initDbSelect() {
+  try {
+    const cfg = await fetch('/api/config').then(r => r.json());
+    const names = await Promise.all(
+      cfg.databases.map(db =>
+        fetch(`/api/company-name?db=${encodeURIComponent(db)}`)
+          .then(r => r.json())
+          .then(j => ({ db, name: j.name || db }))
+          .catch(() => ({ db, name: db }))
+      )
+    );
+    const urlDb = new URLSearchParams(location.search).get('db');
+    const sel = document.getElementById('dbSelect');
+    names.forEach(({ db, name }) => {
+      const opt = document.createElement('option');
+      opt.value = db;
+      opt.textContent = name;
+      if (db === (urlDb || cfg.defaultDb)) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    sel.addEventListener('change', loadData);
+    updateBrand();
+  } catch (e) {
+    console.error('config fetch failed', e);
+  }
+}
+
+function selectedDb() {
+  return document.getElementById('dbSelect').value;
+}
+
+function updateBrand() {
+  const sel = document.getElementById('dbSelect');
+  const label = sel.options[sel.selectedIndex]?.text || selectedDb();
+  document.getElementById('brandCompany').textContent = label;
+}
+
+async function loadData() {
+  updateBrand();
+  const db   = selectedDb();
+  const from = document.getElementById('dateFrom').value;
+  const to   = document.getElementById('dateTo').value;
+  const content = document.getElementById('content');
+
+  content.innerHTML = `<div class="state-box"><div class="spinner"></div>جارٍ تحميل البيانات…</div>`;
+
+  try {
+    const res = await fetch(`/api/cash-sales?db=${encodeURIComponent(db)}&from=${from}&to=${to}`);
+    if (!res.ok) throw new Error((await res.json()).error || res.statusText);
+    const data = await res.json();
+    render(data, from, to, db);
+  } catch (err) {
+    content.innerHTML = `<div class="state-box error">⚠ خطأ في تحميل البيانات: ${err.message}</div>`;
+  }
+}
+
+function render({ summary, detail, totals }, from, to, db) {
+  const sel   = document.getElementById('dbSelect');
+  const label = sel.options[sel.selectedIndex]?.text || db;
+  document.getElementById('printTitle').textContent = `تقرير المبيعات النقدية — ${label}`;
+  document.getElementById('printPeriod').textContent =
+    `الفترة: ${from} – ${to}  |  إجمالي الفواتير: ${totals.invoiceCount}  |  تاريخ الطباعة: ${today()}`;
+
+  const content = document.getElementById('content');
+
+  // ── KPI CARDS ──
+  const kpiHtml = `
+    <div class="kpi-row">
+      <div class="kpi-card gold">
+        <div class="kpi-label">إجمالي المبيعات النقدية (شامل ضريبة)</div>
+        <div class="kpi-value">${fmt(totals.totalWithVat)} <small style="font-size:14px;color:var(--text-muted)">ر.س</small></div>
+        <div class="kpi-sub">الفترة: ${from} – ${to}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">قبل الضريبة</div>
+        <div class="kpi-value">${fmt(totals.totalBeforeVat)} <small style="font-size:14px;color:var(--text-muted)">ر.س</small></div>
+        <div class="kpi-sub">ضريبة الـ 15%: ${fmt(totals.totalVat)} ر.س</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">عدد الفواتير / العملاء</div>
+        <div class="kpi-value">${totals.invoiceCount}</div>
+        <div class="kpi-sub">${summary.length} عميل مختلف</div>
+      </div>
+    </div>`;
+
+  // ── SUMMARY TABLE ──
+  const summaryRows = summary.map((r, i) => `
+    <tr>
+      <td>${i + 1}</td>
+      <td>${r.customerName.trim()}</td>
+      <td style="text-align:center">${r.invoiceCount}</td>
+      <td class="num">${fmt(r.totalBeforeVat)}</td>
+      <td class="num">${fmt(r.totalVat)}</td>
+      <td class="num" style="font-weight:700;color:var(--primary)">${fmt(r.totalWithVat)}</td>
+    </tr>`).join('');
+
+  const summaryHtml = `
+    <div class="section-title">ملخص العملاء</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>اسم العميل</th>
+            <th style="text-align:center">الفواتير</th>
+            <th>قبل الضريبة (ر.س)</th>
+            <th>ضريبة 15% (ر.س)</th>
+            <th>الإجمالي شامل الضريبة (ر.س)</th>
+          </tr>
+        </thead>
+        <tbody>${summaryRows}</tbody>
+        <tfoot>
+          <tr>
+            <td colspan="2" style="font-weight:700">الإجمالي — ${summary.length} عميل</td>
+            <td style="text-align:center;font-weight:700">${totals.invoiceCount}</td>
+            <td class="num">${fmt(totals.totalBeforeVat)}</td>
+            <td class="num">${fmt(totals.totalVat)}</td>
+            <td class="num">${fmt(totals.totalWithVat)}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>`;
+
+  // ── DETAIL TABLE ──
+  const detailRows = detail.map((r, i) => `
+    <tr>
+      <td>${i + 1}</td>
+      <td>${r.customerName.trim()}</td>
+      <td style="text-align:center;direction:ltr">${r.invoiceId}</td>
+      <td style="text-align:center">${String(r.invoiceDate).slice(0, 10)}</td>
+      <td class="num">${fmt(r.totalBeforeVat)}</td>
+      <td class="num">${fmt(r.totalVat)}</td>
+      <td class="num" style="font-weight:600">${fmt(r.totalWithVat)}</td>
+    </tr>`).join('');
+
+  const detailHtml = `
+    <div class="section-title">تفصيل الفواتير</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>اسم العميل</th>
+            <th style="text-align:center">رقم الفاتورة</th>
+            <th style="text-align:center">التاريخ</th>
+            <th>قبل الضريبة (ر.س)</th>
+            <th>ضريبة 15% (ر.س)</th>
+            <th>الإجمالي شامل الضريبة (ر.س)</th>
+          </tr>
+        </thead>
+        <tbody>${detailRows}</tbody>
+        <tfoot>
+          <tr>
+            <td colspan="4" style="font-weight:700">الإجمالي — ${totals.invoiceCount} فاتورة</td>
+            <td class="num">${fmt(totals.totalBeforeVat)}</td>
+            <td class="num">${fmt(totals.totalVat)}</td>
+            <td class="num">${fmt(totals.totalWithVat)}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>`;
+
+  content.innerHTML = kpiHtml + summaryHtml + detailHtml;
+
+  document.getElementById('lastUpdated').textContent = `آخر تحديث: ${new Date().toLocaleTimeString('ar-SA')}`;
+  document.getElementById('lastUpdated').style.color = 'rgba(255,255,255,0.6)';
+}
+
+initDbSelect().then(loadData);
+setInterval(loadData, 60000);
+</script>
+</body>
+</html>
