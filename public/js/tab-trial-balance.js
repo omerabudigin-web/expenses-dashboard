@@ -71,6 +71,21 @@ function initTrialBalance() {
   });
   const tbCmpCb = document.getElementById('tb-compare');
   if (tbCmpCb) tbCmpCb.addEventListener('change', () => { _tbCmpData = null; if (_tbData) fetchTrialBalance(); });
+
+  // Switching the active database must drop any previously fetched balance —
+  // otherwise the tree keeps showing the OLD company's accounts/totals under
+  // the newly selected company (looked like "missing data" for that company).
+  State.on('activeDb', () => {
+    if (_tbData) {
+      _tbData = null; _tbCmpData = null; _tbExpanded = new Set();
+      document.getElementById('tb-tbody').innerHTML = '';
+      document.getElementById('tb-tfoot').innerHTML = '';
+      document.getElementById('tb-balance-check').innerHTML = '';
+      document.getElementById('tb-count').textContent = '';
+      document.getElementById('tb-status').textContent = 'تم تغيير الشركة — اضغط "تشغيل التقرير" لعرض ميزان المراجعة';
+    }
+    _tbPopulateBranches();
+  });
 }
 
 // Expand every node whose level is below the selected default depth
