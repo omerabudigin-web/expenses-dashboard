@@ -491,17 +491,14 @@ app.get('/api/trial-balance', async (req, res) => {
   const dbName = resolveDb(req.query);
   const from     = req.query.from     || null;
   const to       = req.query.to       || null;
-  const level    = parseInt(req.query.level,  10) || 3;
   const branch   = parseInt(req.query.branch, 10) || 0;
   const rootCode = (req.query.rootCode || '').replace(/[^0-9]/g, '').slice(0, 20);
 
   if (!from || !to || !/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to))
     return res.status(400).json({ error: 'from and to must be YYYY-MM-DD' });
-  if (level < 1 || level > 9)
-    return res.status(400).json({ error: 'level must be 1–9' });
 
   try {
-    const rows = await getTrialBalance(dbName, { from, to, level, branch, rootCode });
+    const rows = await getTrialBalance(dbName, { from, to, branch, rootCode });
     res.json(rows);
   } catch (err) {
     console.error('[api/trial-balance]', err.message);

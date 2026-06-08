@@ -199,7 +199,9 @@ td.num,th.num{text-align:left;font-variant-numeric:tabular-nums}
 .tb-dr{color:#5baef0}.tb-cr{color:#da7a7a}
 .tb-zero{color:#3a5a7a}
 .tb-row:hover td{background:#0d2840!important;cursor:pointer}
-.tb-row:hover td:first-child span:first-child{color:#7ac8f0}
+.tb-row:hover td:first-child .tb-code{color:#7ac8f0}
+.tb-row-parent td:first-child{color:#9ad0ff}
+.tb-tree-arrow{font-size:.65rem;vertical-align:middle}
 .tb-col-grp-hdr{background:#060f18;color:#5a7a9a;font-size:.72rem;font-weight:600;text-align:center;border-bottom:1px solid #2a4a6a;padding:5px 4px}
 @media print{
   .tabs,.hdr-meta,.db-switch-row,.conn-banner,.tb-controls,.filters,.btn,.search-row{display:none!important}

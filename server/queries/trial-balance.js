@@ -3,18 +3,21 @@ const sql      = require('mssql');
 const { getPool } = require('../db');
 
 /*
- * Trial balance for a given date range, account level, and branch.
+ * Trial balance for a given date range and branch — returned as a flat list
+ * of EVERY account in the chart that has activity (directly or via
+ * descendants), each carrying parentID so the frontend can build a
+ * collapsible tree (دليل شجري). Balances are rolled up post-order: a
+ * parent's totals are its own postings plus the sum of all its descendants'.
  *
  * Two-query approach:
- *   1. Single pass over JD with conditional aggregation for opening + period.
- *   2. Load the full AccountChart (small table).
- *   3. Resolve leaf → ancestor at requested level in JavaScript.
- *   4. rootCode filter uses actual parent-child relationships, not code-prefix
- *      matching (ERP account codes may not follow a strict prefix hierarchy).
+ *   1. Single pass over JD with conditional aggregation for opening + period
+ *      (grouped by the actual posting account — may be any level).
+ *   2. Load the full AccountChart (small table) to resolve parent/child links.
+ *   rootCode filter uses actual parent-child relationships, not code-prefix
+ *   matching (ERP account codes may not follow a strict prefix hierarchy).
  */
-async function getTrialBalance(dbName, { from, to, level, branch, rootCode }) {
+async function getTrialBalance(dbName, { from, to, branch, rootCode }) {
   const pool  = await getPool(dbName);
-  const lvl   = parseInt(level,  10) || 3;
   const brn   = parseInt(branch, 10) || 0;
   const rcode = (rootCode || '').trim();
 
@@ -82,21 +85,6 @@ async function getTrialBalance(dbName, { from, to, level, branch, rootCode }) {
     return set;
   }
 
-  // Walk a leaf up to the ancestor at targetLevel
-  function resolveAncestor(leafID) {
-    const visited = new Set();
-    let cur = acMap.get(leafID);
-    while (cur) {
-      if (visited.has(cur.id)) break;
-      visited.add(cur.id);
-      if (cur.levelNo === lvl) return cur;
-      if (cur.levelNo < lvl)  return cur;   // above target — use as-is
-      if (!cur.parentID)      return cur;
-      cur = acMap.get(cur.parentID) || null;
-    }
-    return null;
-  }
-
   // Allowed-ancestor set: descendants of the rootCode account (by parentage, not prefix)
   let allowedAncs = null;
   if (rcode) {
@@ -104,37 +92,56 @@ async function getTrialBalance(dbName, { from, to, level, branch, rootCode }) {
     if (root) allowedAncs = subtreeIds(root.id);
   }
 
-  // ── Aggregate ────────────────────────────────────────────────────────────────
-  const aggMap = new Map();
-
+  // ── Own (direct) postings per account — postings may land on any level ──────
+  const ownAgg = new Map();
   for (const row of jdRes.recordset) {
-    const anc = resolveAncestor(row.leafID);
-    if (!anc) continue;
-    if (allowedAncs && !allowedAncs.has(anc.id)) continue;
-
-    const ob = +row.openBal || 0;
-    const dr = +row.pDebit  || 0;
-    const cr = +row.pCredit || 0;
-
-    if (aggMap.has(anc.id)) {
-      const e = aggMap.get(anc.id);
-      e.openBal += ob; e.pDebit += dr; e.pCredit += cr;
-    } else {
-      aggMap.set(anc.id, { ac: anc, openBal: ob, pDebit: dr, pCredit: cr });
-    }
+    if (!acMap.has(row.leafID)) continue;
+    const e = ownAgg.get(row.leafID) || { openBal: 0, pDebit: 0, pCredit: 0 };
+    e.openBal += (+row.openBal || 0);
+    e.pDebit  += (+row.pDebit  || 0);
+    e.pCredit += (+row.pCredit || 0);
+    ownAgg.set(row.leafID, e);
   }
 
-  return [...aggMap.values()]
-    .map(({ ac, openBal, pDebit, pCredit }) => ({
+  // ── Roll up post-order: a node's total = its own postings + all descendants ─
+  const rollup = new Map();
+  function computeRollup(id) {
+    if (rollup.has(id)) return rollup.get(id);
+    rollup.set(id, { openBal: 0, pDebit: 0, pCredit: 0 }); // cycle guard
+    const own   = ownAgg.get(id) || { openBal: 0, pDebit: 0, pCredit: 0 };
+    const total = { openBal: own.openBal, pDebit: own.pDebit, pCredit: own.pCredit };
+    for (const childId of (childrenOf.get(id) || [])) {
+      const c = computeRollup(childId);
+      total.openBal += c.openBal;
+      total.pDebit  += c.pDebit;
+      total.pCredit += c.pCredit;
+    }
+    rollup.set(id, total);
+    return total;
+  }
+  acMap.forEach((_, id) => computeRollup(id));
+
+  const HAS_ACTIVITY = t => Math.abs(t.openBal) > 0.004 || Math.abs(t.pDebit) > 0.004 || Math.abs(t.pCredit) > 0.004;
+
+  const result = [];
+  acMap.forEach((ac, id) => {
+    if (allowedAncs && !allowedAncs.has(id)) return;
+    const t = rollup.get(id);
+    if (!HAS_ACTIVITY(t)) return;
+    result.push({
+      id:       ac.id,
+      parentID: ac.parentID,
       code:     ac.code,
       name:     ac.name,
       levelNo:  ac.levelNo,
-      openBal,
-      pDebit,
-      pCredit,
-      closeBal: openBal + pDebit - pCredit,
-    }))
-    .sort((a, b) => a.code.localeCompare(b.code));
+      openBal:  t.openBal,
+      pDebit:   t.pDebit,
+      pCredit:  t.pCredit,
+      closeBal: t.openBal + t.pDebit - t.pCredit,
+    });
+  });
+
+  return result.sort((a, b) => a.code.localeCompare(b.code));
 }
 
 async function getBranchList(dbName) {

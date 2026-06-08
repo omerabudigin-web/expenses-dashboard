@@ -1,10 +1,10 @@
 ﻿// ── Tab dispatcher ────────────────────────────────────────────────────────────
 // ── TRIAL BALANCE tab ─────────────────────────────────────────────────────────
 
-let _tbData       = null;   // last fetched rows
+let _tbData       = null;   // last fetched rows (flat list, every account w/ activity, carries id/parentID)
 let _tbCmpData    = null;   // comparison period (same months, previous year)
 let _tbInited     = false;
-let _tbRootFilter = null;   // { code, name, level } — current drill-down root
+let _tbExpanded   = new Set();  // ids of expanded tree nodes
 
 function _tbLastDay(ym) {
   const [y, m] = ym.split('-').map(Number);
@@ -41,7 +41,16 @@ function initTrialBalance() {
     });
   }
 
-  document.getElementById('tb-run').addEventListener('click', () => { _tbRootFilter = null; _tbUpdateBreadcrumb(); fetchTrialBalance(); });
+  document.getElementById('tb-run').addEventListener('click', fetchTrialBalance);
+  // Delegated click to expand/collapse tree nodes (CSP blocks inline onclick attributes)
+  document.getElementById('tb-tbody').addEventListener('click', e => {
+    const row = e.target.closest('tr[data-toggle-id]');
+    if (!row) return;
+    const id = +row.dataset.toggleId;
+    if (_tbExpanded.has(id)) _tbExpanded.delete(id);
+    else _tbExpanded.add(id);
+    _renderTBRows();
+  });
   document.getElementById('tb-export-excel').addEventListener('click', () => {
     const btn = document.getElementById('tb-export-excel');
     btn.disabled = true; btn.textContent = '⏳ جاري التصدير…';
@@ -52,11 +61,46 @@ function initTrialBalance() {
   document.getElementById('tb-export-csv').addEventListener('click',   exportTBCSV);
   document.getElementById('tb-print').addEventListener('click', () => window.print());
   document.getElementById('tb-search').addEventListener('input', _renderTBRows);
-  document.getElementById('tb-level').addEventListener('change', _tbResetData);
+  // Level selector now controls the *default expand depth* of the tree —
+  // the data already contains the full hierarchy, so just recompute & redraw.
+  document.getElementById('tb-level').addEventListener('change', () => {
+    if (_tbData) {
+      _tbExpanded = _tbDefaultExpand(_tbData);
+      _renderTBRows();
+    }
+  });
   const tbCmpCb = document.getElementById('tb-compare');
   if (tbCmpCb) tbCmpCb.addEventListener('change', () => { _tbCmpData = null; if (_tbData) fetchTrialBalance(); });
-  const bcBack = document.getElementById('tb-bc-back');
-  if (bcBack) bcBack.addEventListener('click', () => { _tbRootFilter = null; _tbUpdateBreadcrumb(); fetchTrialBalance(); });
+}
+
+// Expand every node whose level is below the selected default depth
+// (so its children become visible at first render).
+function _tbDefaultExpand(data) {
+  const lvl = parseInt((document.getElementById('tb-level') || {}).value, 10) || 3;
+  const set = new Set();
+  data.forEach(r => { if (r.levelNo < lvl) set.add(r.id); });
+  return set;
+}
+
+// Root nodes of a hierarchical dataset — those whose parent isn't itself in the set
+function _tbRootNodes(data) {
+  if (!data || !data.length) return [];
+  const ids = new Set(data.map(r => r.id));
+  return data.filter(r => !r.parentID || !ids.has(r.parentID));
+}
+
+// Build parent → children index (sorted by code) for tree rendering
+function _tbBuildChildIndex(data) {
+  const ids = new Set(data.map(r => r.id));
+  const childrenOf = new Map();
+  data.forEach(r => {
+    if (r.parentID && ids.has(r.parentID)) {
+      if (!childrenOf.has(r.parentID)) childrenOf.set(r.parentID, []);
+      childrenOf.get(r.parentID).push(r);
+    }
+  });
+  childrenOf.forEach(list => list.sort((a, b) => a.code.localeCompare(b.code)));
+  return childrenOf;
 }
 
 async function _tbPopulateBranches() {
@@ -80,28 +124,9 @@ async function _tbPopulateBranches() {
   }
 }
 
-function _tbResetData() { _tbData = null; _tbCmpData = null; _tbRootFilter = null; _tbUpdateBreadcrumb(); _renderTBRows(); }
-
-function _tbUpdateBreadcrumb() {
-  const el = document.getElementById('tb-breadcrumb');
-  const pathEl = document.getElementById('tb-bc-path');
-  if (!el || !pathEl) return;
-  if (_tbRootFilter) {
-    const levelName = (document.getElementById('tb-level') || {}).options;
-    const lvlTxt = levelName ? [...levelName].find(o => o.selected)?.textContent || '' : '';
-    pathEl.innerHTML = `<span style="color:#6a9aca;font-family:monospace;font-size:.78rem">${esc(_tbRootFilter.code)}</span> — ${esc(_tbRootFilter.name)}`;
-    el.classList.remove('hidden');
-    el.style.display = 'flex';
-  } else {
-    el.classList.add('hidden');
-    el.style.display = 'none';
-  }
-}
-
 async function fetchTrialBalance() {
   const from   = document.getElementById('tb-from').value;
   const to     = document.getElementById('tb-to').value;
-  const level  = document.getElementById('tb-level').value;
   const brVal  = document.getElementById('tb-branch').value;
   const branch = brVal === 'ALL' ? 0 : (+brVal || 0);
 
@@ -113,14 +138,13 @@ async function fetchTrialBalance() {
   const fromDate = `${from}-01`;
   const toDate   = _tbLastDay(to);
   const db       = State.get('activeDb') || '';
-  const rootCode = _tbRootFilter ? _tbRootFilter.code : '';
-  const qs       = new URLSearchParams({ db, from: fromDate, to: toDate, level, branch, rootCode });
+  const qs       = new URLSearchParams({ db, from: fromDate, to: toDate, branch });
 
   // Comparison period: same months, previous year
   const prevFrom   = `${+from.substring(0,4)-1}${from.substring(4)}-01`;
   const prevToYM   = `${+to.substring(0,4)-1}${to.substring(4)}`;
   const prevTo     = _tbLastDay(prevToYM);
-  const cmpQs      = new URLSearchParams({ db, from: prevFrom, to: prevTo, level, branch, rootCode });
+  const cmpQs      = new URLSearchParams({ db, from: prevFrom, to: prevTo, branch });
   const wantCmp    = !!(document.getElementById('tb-compare')?.checked);
 
   const loadEl   = document.getElementById('tb-loading');
@@ -141,6 +165,7 @@ async function fetchTrialBalance() {
     ]);
     _tbData    = resp;
     _tbCmpData = cmpRows;
+    _tbExpanded = _tbDefaultExpand(_tbData);
     statusEl.textContent = cmpRows ? `${resp.length} حساب + مقارنة` : '';
     _renderTBRows();
   } catch (e) {
@@ -157,22 +182,8 @@ async function fetchTrialBalance() {
 function renderTrialBalance() {
   initTrialBalance();
   _tbPopulateBranches();
-  _tbUpdateBreadcrumb();
   if (_tbData) _renderTBRows();
 }
-
-// Called when user clicks a row to drill into its sub-accounts
-window._tbDrillIn = function(code, name) {
-  _tbRootFilter = { code, name };
-  // Advance level by 1 automatically (max 5)
-  const levelEl = document.getElementById('tb-level');
-  if (levelEl) {
-    const cur = parseInt(levelEl.value) || 3;
-    if (cur < 5) levelEl.value = String(cur + 1);
-  }
-  _tbUpdateBreadcrumb();
-  fetchTrialBalance();
-};
 
 function _renderTBRows() {
   if (!_tbData) return;
@@ -223,16 +234,33 @@ function _renderTBRows() {
       </tr>`;
   }
 
-  const rows = _tbData.filter(r =>
-    !search ||
-    r.code.toLowerCase().includes(search) ||
-    (r.name || '').toLowerCase().includes(search)
-  );
+  // ── Tree structures ─────────────────────────────────────────────────────────
+  const byId       = new Map(_tbData.map(r => [r.id, r]));
+  const childrenOf = _tbBuildChildIndex(_tbData);
+  const roots      = _tbRootNodes(_tbData).slice().sort((a, b) => a.code.localeCompare(b.code));
 
-  let totOpenDr = 0, totOpenCr = 0;
-  let totPDr    = 0, totPCr    = 0;
-  let totClDr   = 0, totClCr   = 0;
-  let totCmpDr  = 0, totCmpCr  = 0;
+  // ── Search: limit to matches + their ancestor chain (for context), and
+  // force-expand those ancestors so the matches are visible ───────────────────
+  let visible     = null;   // null = show everything
+  let forceExpand = null;
+  let matchCount  = _tbData.length;
+  if (search) {
+    const matches = _tbData.filter(r =>
+      r.code.toLowerCase().includes(search) || (r.name || '').toLowerCase().includes(search)
+    );
+    matchCount  = matches.length;
+    visible     = new Set();
+    forceExpand = new Set();
+    matches.forEach(m => {
+      visible.add(m.id);
+      let cur = m;
+      while (cur && cur.parentID && byId.has(cur.parentID)) {
+        visible.add(cur.parentID);
+        forceExpand.add(cur.parentID);
+        cur = byId.get(cur.parentID);
+      }
+    });
+  }
 
   let lastSec = null;
   const html  = [];
@@ -240,11 +268,15 @@ function _renderTBRows() {
   const fmtDr = v => v > 0.004 ? `<span class="tb-dr">${fmt(v, 2)}</span>` : `<span class="tb-zero">—</span>`;
   const fmtCr = v => v > 0.004 ? `<span class="tb-cr">${fmt(v, 2)}</span>` : `<span class="tb-zero">—</span>`;
 
-  rows.forEach(r => {
-    const sec = r.code ? r.code[0] : '';
-    if (sec !== lastSec && SEC_LABEL[sec]) {
-      html.push(`<tr class="tb-grp-hdr"><td colspan="${C}">${SEC_LABEL[sec]}</td></tr>`);
-      lastSec = sec;
+  function renderNode(r, depth) {
+    if (visible && !visible.has(r.id)) return;
+
+    if (depth === 0) {
+      const sec = r.code ? r.code[0] : '';
+      if (sec !== lastSec && SEC_LABEL[sec]) {
+        html.push(`<tr class="tb-grp-hdr"><td colspan="${C}">${SEC_LABEL[sec]}</td></tr>`);
+        lastSec = sec;
+      }
     }
 
     const openDr = r.openBal  > 0 ? r.openBal  : 0;
@@ -252,17 +284,12 @@ function _renderTBRows() {
     const clDr   = r.closeBal > 0 ? r.closeBal : 0;
     const clCr   = r.closeBal < 0 ? -r.closeBal : 0;
 
-    totOpenDr += openDr; totOpenCr += openCr;
-    totPDr    += r.pDebit; totPCr  += r.pCredit;
-    totClDr   += clDr;    totClCr  += clCr;
-
     // Comparison cells
     let cmpCells = '';
     if (cmp) {
       const prevCl  = cmpMap.has(r.code) ? (cmpMap.get(r.code) || 0) : null;
       const pDr     = prevCl !== null && prevCl > 0 ? prevCl  : 0;
       const pCr     = prevCl !== null && prevCl < 0 ? -prevCl : 0;
-      totCmpDr += pDr; totCmpCr += pCr;
       const curNet  = r.closeBal || 0;
       const prevNet = prevCl !== null ? prevCl : null;
       let pctCell   = `<span style="color:#3a5a7a">—</span>`;
@@ -279,16 +306,22 @@ function _renderTBRows() {
         <td class="num" style="background:#06111e">${pctCell}</td>`;
     }
 
-    const canDrill = (parseInt((document.getElementById('tb-level')||{}).value)||3) < 5;
-    const codeEsc  = esc(r.code);
-    const nameEsc  = esc(r.name).replace(/'/g, '&#39;');
+    const kids       = childrenOf.get(r.id) || [];
+    const hasKids    = kids.length > 0;
+    const isExpanded = hasKids && (_tbExpanded.has(r.id) || (forceExpand && forceExpand.has(r.id)));
+    const codeEsc    = esc(r.code);
+    const indent     = 8 + depth * 22;
 
-    html.push(`<tr class="tb-row" style="cursor:${canDrill?'pointer':'default'}" ${canDrill?`onclick="_tbDrillIn('${r.code}','${nameEsc}')"`:''} title="${canDrill?'اضغط لعرض التفاصيل':''}" >
-      <td style="font-family:monospace;font-size:.77rem">
-        <span style="color:#6a9aca">${codeEsc}</span>
-        ${canDrill ? `<span style="color:#3a6a9a;font-size:.7rem;margin-right:4px">▶</span>` : ''}
+    const toggleAttrs = hasKids ? `data-toggle-id="${r.id}"` : '';
+    const arrow = hasKids
+      ? `<span class="tb-tree-arrow" style="display:inline-block;width:14px;color:#6a9aca">${isExpanded ? '▼' : '◀'}</span>`
+      : `<span class="tb-tree-arrow" style="display:inline-block;width:14px"></span>`;
+
+    html.push(`<tr class="tb-row${hasKids ? ' tb-row-parent' : ''}" style="cursor:${hasKids?'pointer':'default'}" ${toggleAttrs} title="${hasKids?'اضغط للطي/التوسيع':''}">
+      <td style="font-family:monospace;font-size:.77rem;padding-right:${indent}px">
+        ${arrow}<span class="tb-code" style="color:#6a9aca">${codeEsc}</span>
       </td>
-      <td style="${canDrill?'color:#c8e8ff':''}">${esc(r.name)}</td>
+      <td style="${hasKids?'color:#c8e8ff;font-weight:600':''}">${esc(r.name)}</td>
       <td class="num">${fmtDr(openDr)}</td>
       <td class="num">${fmtCr(openCr)}</td>
       <td class="num">${r.pDebit  > 0.004 ? fmtDr(r.pDebit)  : '<span class="tb-zero">—</span>'}</td>
@@ -297,11 +330,38 @@ function _renderTBRows() {
       <td class="num">${fmtCr(clCr)}</td>
       ${cmpCells}
     </tr>`);
-  });
+
+    if (hasKids && isExpanded) kids.forEach(k => renderNode(k, depth + 1));
+  }
+
+  roots.forEach(r => renderNode(r, 0));
 
   document.getElementById('tb-tbody').innerHTML =
     html.join('') ||
     `<tr><td colspan="${C}" style="text-align:center;padding:32px;color:#3a5a7a">لا توجد حسابات تطابق البحث</td></tr>`;
+
+  // ── Grand totals — summed from ROOT nodes only. Each root's rolled-up
+  // totals already include all of its descendants, so summing every rendered
+  // row would double- (or triple-) count amounts up the chain. ────────────────
+  let totOpenDr = 0, totOpenCr = 0;
+  let totPDr    = 0, totPCr    = 0;
+  let totClDr   = 0, totClCr   = 0;
+  let totCmpDr  = 0, totCmpCr  = 0;
+  roots.forEach(r => {
+    totOpenDr += r.openBal  > 0 ? r.openBal  : 0;
+    totOpenCr += r.openBal  < 0 ? -r.openBal : 0;
+    totPDr    += r.pDebit;
+    totPCr    += r.pCredit;
+    totClDr   += r.closeBal > 0 ? r.closeBal : 0;
+    totClCr   += r.closeBal < 0 ? -r.closeBal : 0;
+    if (cmp) {
+      const prevCl = cmpMap.has(r.code) ? (cmpMap.get(r.code) || 0) : null;
+      if (prevCl !== null) {
+        totCmpDr += prevCl > 0 ? prevCl  : 0;
+        totCmpCr += prevCl < 0 ? -prevCl : 0;
+      }
+    }
+  });
 
   // Totals footer
   document.getElementById('tb-tfoot').innerHTML = `
@@ -330,7 +390,7 @@ function _renderTBRows() {
     : `⚠ تفاوت في الميزان — أول الفترة: ${fmt(openDiff, 2)} | آخر الفترة: ${fmt(closeDiff, 2)}`;
 
   document.getElementById('tb-count').textContent =
-    `${rows.length.toLocaleString('ar-SA')} حساب`;
+    `${matchCount.toLocaleString('ar-SA')} حساب${search ? ` (من أصل ${_tbData.length.toLocaleString('ar-SA')})` : ''}`;
 }
 
 // ── Excel export (ExcelJS) ────────────────────────────────────────────────────
@@ -440,47 +500,57 @@ async function exportTBExcel() {
       });
     }
 
-    // ── Data rows ─────────────────────────────────────────────────────────────
+    // ── Data rows — walk the hierarchy (not the flat list) so each account
+    // appears once, indented by depth; sums are taken at root level only to
+    // avoid double-counting rolled-up parent totals. ─────────────────────────
     const SEC_LABEL = {'1':'الأصول','2':'الخصوم','3':'حقوق الملكية','4':'المصروفات والتكاليف','5':'الإيرادات'};
     let totODr=0,totOCr=0,totPDr=0,totPCr=0,totCDr=0,totCCr=0,totCmpDr=0,totCmpCr=0;
     let lastSec = null;
 
-    _tbData.forEach(r => {
-      const sec = r.code ? r.code[0] : '';
-      if (sec !== lastSec && SEC_LABEL[sec]) { addSecHdr(SEC_LABEL[sec]); lastSec = sec; }
+    const childrenOf = _tbBuildChildIndex(_tbData);
+    const roots      = _tbRootNodes(_tbData).slice().sort((a, b) => a.code.localeCompare(b.code));
+
+    function walk(r, depth) {
+      if (depth === 0) {
+        const sec = r.code ? r.code[0] : '';
+        if (sec !== lastSec && SEC_LABEL[sec]) { addSecHdr(SEC_LABEL[sec]); lastSec = sec; }
+      }
 
       const oDr = r.openBal  > 0 ? r.openBal  : 0;
       const oCr = r.openBal  < 0 ? -r.openBal : 0;
       const cDr = r.closeBal > 0 ? r.closeBal : 0;
       const cCr = r.closeBal < 0 ? -r.closeBal: 0;
-      totODr+=oDr; totOCr+=oCr; totPDr+=r.pDebit; totPCr+=r.pCredit; totCDr+=cDr; totCCr+=cCr;
 
-      let pDr=0, pCr=0, pct=null;
+      let pDr=0, pCr=0, pct=null, prevCl=null;
       if (cmp) {
-        const prevCl = cmpMap.has(r.code) ? (cmpMap.get(r.code)||0) : null;
+        prevCl = cmpMap.has(r.code) ? (cmpMap.get(r.code)||0) : null;
         pDr = prevCl !== null && prevCl > 0 ? prevCl  : 0;
         pCr = prevCl !== null && prevCl < 0 ? -prevCl : 0;
-        totCmpDr += pDr; totCmpCr += pCr;
-        const prevNet = prevCl;
-        pct = prevNet !== null && Math.abs(prevNet) > 0.004
-          ? +((r.closeBal - prevNet) / Math.abs(prevNet) * 100).toFixed(1) : null;
+        pct = prevCl !== null && Math.abs(prevCl) > 0.004
+          ? +((r.closeBal - prevCl) / Math.abs(prevCl) * 100).toFixed(1) : null;
+      }
+
+      if (depth === 0) {
+        totODr+=oDr; totOCr+=oCr; totPDr+=r.pDebit; totPCr+=r.pCredit; totCDr+=cDr; totCCr+=cCr;
+        if (cmp && prevCl !== null) { totCmpDr += pDr; totCmpCr += pCr; }
       }
 
       const row = ws.addRow([r.code, r.name, oDr||null, oCr||null, r.pDebit||null, r.pCredit||null, cDr||null, cCr||null,
         ...(cmp ? [pDr||null, pCr||null, pct] : [])]);
       row.height = 16;
       const hairBdr = { bottom: bdr('hair','FFE8ECF0') };
+      const isRoot  = depth === 0;
 
       row.getCell(1).font = { name:FONT, size:8.5, color:{ argb:CLR.textGray } };
       row.getCell(1).alignment = { horizontal:'left', vertical:'middle' };
       row.getCell(1).border = hairBdr;
 
-      row.getCell(2).font = { name:FONT, size:9.5, color:{ argb:CLR.textDark } };
-      row.getCell(2).alignment = { horizontal:'right', vertical:'middle', indent:1 };
+      row.getCell(2).font = { name:FONT, size:9.5, bold: isRoot, color:{ argb: isRoot ? CLR.textNavy : CLR.textDark } };
+      row.getCell(2).alignment = { horizontal:'right', vertical:'middle', indent: 1 + depth };
       row.getCell(2).border = hairBdr;
 
       for (let ci = 3; ci <= 8; ci++) {
-        setNum(row.getCell(ci), row.getCell(ci).value, CLR.textNavy, false);
+        setNum(row.getCell(ci), row.getCell(ci).value, CLR.textNavy, isRoot);
         row.getCell(ci).border = hairBdr;
       }
       if (cmp) {
@@ -499,7 +569,10 @@ async function exportTBExcel() {
         pctCell.border = hairBdr;
         pctCell.fill   = solid('FFF8FAFE');
       }
-    });
+
+      (childrenOf.get(r.id) || []).forEach(k => walk(k, depth + 1));
+    }
+    roots.forEach(r => walk(r, 0));
 
     // ── Totals row ────────────────────────────────────────────────────────────
     addSpacer(3);
@@ -554,7 +627,6 @@ function exportTBHTML() {
   const levelLbl  = ([...document.getElementById('tb-level').options].find(o=>o.selected)||{}).textContent || '';
   const branchLbl = ([...document.getElementById('tb-branch').options].find(o=>o.selected)||{}).textContent || 'جميع الفروع';
   const genDate   = new Date().toLocaleDateString('ar-SA', {year:'numeric',month:'long',day:'numeric'});
-  const rootInfo  = _tbRootFilter ? ` — ${_tbRootFilter.name} (${_tbRootFilter.code})` : '';
   const cmp       = !!(document.getElementById('tb-compare')?.checked && _tbCmpData);
   const cmpMap    = cmp ? new Map(_tbCmpData.map(r => [r.code, r.closeBal])) : null;
   const prevFrom  = from ? `${+from.substring(0,4)-1}${from.substring(4)}` : '';
@@ -570,24 +642,33 @@ function exportTBHTML() {
   const N  = v => v > 0.004 ? v.toLocaleString('ar-SA',{minimumFractionDigits:2,maximumFractionDigits:2}) : '';
   const Nf = v => v.toLocaleString('ar-SA',{minimumFractionDigits:2,maximumFractionDigits:2});
 
-  _tbData.forEach(r => {
-    const sec = r.code ? r.code[0] : '';
-    if (sec !== lastSec && SEC_LABEL[sec]) {
-      tbRows += `<tr class="sec-hdr"><td colspan="${C}">${SEC_LABEL[sec]}</td></tr>`;
-      lastSec = sec;
+  // Walk the hierarchy (not the flat list) so each row appears once, indented
+  // by depth — this avoids double-counting rolled-up parent totals in the sum.
+  const childrenOf = _tbBuildChildIndex(_tbData);
+  const roots      = _tbRootNodes(_tbData).slice().sort((a, b) => a.code.localeCompare(b.code));
+
+  function walk(r, depth) {
+    if (depth === 0) {
+      const sec = r.code ? r.code[0] : '';
+      if (sec !== lastSec && SEC_LABEL[sec]) {
+        tbRows += `<tr class="sec-hdr"><td colspan="${C}">${SEC_LABEL[sec]}</td></tr>`;
+        lastSec = sec;
+      }
     }
     const oDr = r.openBal  > 0 ? r.openBal  : 0;
     const oCr = r.openBal  < 0 ? -r.openBal : 0;
     const cDr = r.closeBal > 0 ? r.closeBal : 0;
     const cCr = r.closeBal < 0 ? -r.closeBal : 0;
-    totODr+=oDr; totOCr+=oCr; totPDr+=r.pDebit; totPCr+=r.pCredit; totCDr+=cDr; totCCr+=cCr;
+    if (depth === 0) {
+      totODr+=oDr; totOCr+=oCr; totPDr+=r.pDebit; totPCr+=r.pCredit; totCDr+=cDr; totCCr+=cCr;
+    }
 
     let cmpCells = '';
     if (cmp) {
       const prevCl = cmpMap.has(r.code) ? (cmpMap.get(r.code) || 0) : null;
       const pDr    = prevCl !== null && prevCl > 0 ? prevCl  : 0;
       const pCr    = prevCl !== null && prevCl < 0 ? -prevCl : 0;
-      totCmpDr += pDr; totCmpCr += pCr;
+      if (depth === 0 && prevCl !== null) { totCmpDr += pDr; totCmpCr += pCr; }
       const curNet  = r.closeBal || 0;
       const prevNet = prevCl !== null ? prevCl : null;
       let pctHtml   = '';
@@ -600,15 +681,19 @@ function exportTBHTML() {
       cmpCells = `<td class="cmp-dr">${N(pDr)}</td><td class="cmp-cr">${N(pCr)}</td><td class="pct">${pctHtml}</td>`;
     }
 
+    const indent = depth * 18;
     tbRows += `<tr>
-      <td class="code">${esc(r.code)}</td>
-      <td class="name">${esc(r.name)}</td>
+      <td class="code" style="padding-right:${8 + indent}px">${esc(r.code)}</td>
+      <td class="name" style="${depth === 0 ? 'font-weight:700;color:#0a2040' : ''}">${esc(r.name)}</td>
       <td class="dr">${N(oDr)}</td><td class="cr">${N(oCr)}</td>
       <td class="dr">${N(r.pDebit)}</td><td class="cr">${N(r.pCredit)}</td>
       <td class="dr">${N(cDr)}</td><td class="cr">${N(cCr)}</td>
       ${cmpCells}
     </tr>`;
-  });
+
+    (childrenOf.get(r.id) || []).forEach(k => walk(k, depth + 1));
+  }
+  roots.forEach(r => walk(r, 0));
 
   const balanced = Math.abs(totCDr - totCCr) < 1;
   const cmpTheadExtra = cmp ? `
@@ -664,7 +749,7 @@ tfoot td.cmp-dr,tfoot td.cmp-cr,tfoot td.pct{background:#dce4f0}
 <body>
 <div class="page">
   <div class="co-name">${esc(company)}</div>
-  <div class="title">ميزان المراجعة${esc(rootInfo)}</div>
+  <div class="title">ميزان المراجعة</div>
   <div class="meta">
     الفترة: ${from} إلى ${to} &nbsp;|&nbsp; ${esc(levelLbl)} &nbsp;|&nbsp; الفرع: ${esc(branchLbl)}
     ${cmp ? `<br>مقارنة بالفترة: ${esc(prevFrom)} إلى ${esc(prevTo)}` : ''}<br>
@@ -721,21 +806,35 @@ tfoot td.cmp-dr,tfoot td.cmp-cr,tfoot td.pct{background:#dce4f0}
 function exportTBCSV() {
   if (!_tbData) return;
   const hdr = [
-    'كود الحساب','اسم الحساب',
+    'المستوى','كود الحساب','اسم الحساب',
     'أول الفترة مدين','أول الفترة دائن',
     'حركة مدين','حركة دائن',
     'آخر الفترة مدين','آخر الفترة دائن',
   ];
-  const lines = [hdr.join(',')].concat(_tbData.map(r => [
-    r.code,
-    `"${(r.name || '').replace(/"/g, '""')}"`,
-    r.openBal  > 0 ? r.openBal.toFixed(2)  : '',
-    r.openBal  < 0 ? (-r.openBal).toFixed(2) : '',
-    r.pDebit   > 0 ? r.pDebit.toFixed(2)   : '',
-    r.pCredit  > 0 ? r.pCredit.toFixed(2)  : '',
-    r.closeBal > 0 ? r.closeBal.toFixed(2) : '',
-    r.closeBal < 0 ? (-r.closeBal).toFixed(2) : '',
-  ].join(',')));
+
+  // Walk the hierarchy (parent → children, by code) so the CSV reflects the
+  // tree order with an indented name + explicit level column — each account's
+  // value is its own rolled-up balance (own postings + descendants).
+  const childrenOf = _tbBuildChildIndex(_tbData);
+  const roots      = _tbRootNodes(_tbData).slice().sort((a, b) => a.code.localeCompare(b.code));
+  const lines = [hdr.join(',')];
+
+  function walk(r, depth) {
+    lines.push([
+      depth + 1,
+      r.code,
+      `"${'— '.repeat(depth) + (r.name || '').replace(/"/g, '""')}"`,
+      r.openBal  > 0 ? r.openBal.toFixed(2)  : '',
+      r.openBal  < 0 ? (-r.openBal).toFixed(2) : '',
+      r.pDebit   > 0 ? r.pDebit.toFixed(2)   : '',
+      r.pCredit  > 0 ? r.pCredit.toFixed(2)  : '',
+      r.closeBal > 0 ? r.closeBal.toFixed(2) : '',
+      r.closeBal < 0 ? (-r.closeBal).toFixed(2) : '',
+    ].join(','));
+    (childrenOf.get(r.id) || []).forEach(k => walk(k, depth + 1));
+  }
+  roots.forEach(r => walk(r, 0));
+
   const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
