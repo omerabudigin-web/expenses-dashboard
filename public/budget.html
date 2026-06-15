@@ -196,6 +196,17 @@
   }
   thead th.col-label{font-size:.85rem;color:var(--text)}
 
+  /* ── Quarterly / Annual summary ── */
+  .summary-card{margin:0 20px 20px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px}
+  .summary-card h3{font-size:.9rem;color:var(--text-dim);margin-bottom:12px}
+  th.col-ytotal,td.col-ytotal{border-right:3px solid var(--gold)!important}
+  td.col-ytotal{font-weight:700}
+  th.col-ytotal{color:var(--gold)}
+  .qstatus{display:inline-block;font-size:.65rem;padding:1px 6px;border-radius:8px;margin-top:2px;font-weight:400}
+  .qstatus.actual{background:rgba(138,155,181,.15);color:var(--text-dim)}
+  .qstatus.forecast{background:rgba(212,160,23,.2);color:var(--gold)}
+  .qstatus.mixed{background:rgba(255,200,50,.15);color:#e0b840}
+
   /* ── Methodology note ── */
   .method-note{
     margin:0 20px 28px;background:var(--card);border:1px solid var(--border);
@@ -309,6 +320,12 @@
 <!-- Table -->
 <div class="table-wrap" id="tableWrap">
   <div class="loading">جارٍ بناء الموازنة…</div>
+</div>
+
+<!-- Quarterly & Annual Summary -->
+<div class="summary-card">
+  <h3>📊 ملخص ربعي وسنوي — 2026</h3>
+  <div class="table-wrap" style="padding:0" id="summaryTable"></div>
 </div>
 
 <!-- Methodology -->
@@ -500,6 +517,92 @@ function renderTable(historical, forecast, scen) {
   document.getElementById('tableWrap').innerHTML = h;
 }
 
+/* ── Quarterly / Annual summary ── */
+const OPEX_KEYS    = ['sal','rent','maint','sell','dist','adm','char','fin','oth'];
+const QUARTER_NAMES = ['', 'الأول', 'الثاني', 'الثالث', 'الرابع'];
+
+function sumGroup(months) {
+  const out = {};
+  ['revenue','cogs', ...OPEX_KEYS].forEach(k => out[k] = months.reduce((s,m) => s + (m[k]||0), 0));
+  out.grossProfit = out.revenue - out.cogs;
+  out.opex        = OPEX_KEYS.reduce((s,k) => s + out[k], 0);
+  out.netProfit   = out.grossProfit - out.opex;
+  out.grossMargin = out.revenue ? out.grossProfit / out.revenue : 0;
+  out.netMargin   = out.revenue ? out.netProfit   / out.revenue : 0;
+  return out;
+}
+
+function groupStatus(months) {
+  if (months.every(m => !m.isForecast && !m.isPartial)) return 'actual';
+  if (months.every(m => m.isForecast)) return 'forecast';
+  return 'mixed';
+}
+
+const STATUS_LABEL = { actual:'فعلي', forecast:'تقدير', mixed:'فعلي + تقدير' };
+
+function buildQuarterGroups(historical, forecast) {
+  const all   = [...historical, ...forecast];
+  const years = [...new Set(forecast.map(m => m.month.slice(0,4)))].sort();
+  const groups = [];
+
+  years.forEach(year => {
+    for (let q = 1; q <= 4; q++) {
+      const monthsInQ = all.filter(m => {
+        const [y, mo] = m.month.split('-').map(Number);
+        return String(y) === year && Math.ceil(mo/3) === q;
+      });
+      if (!monthsInQ.length) continue;
+      groups.push({
+        label: `الربع ${QUARTER_NAMES[q]} ${year.slice(2)}`,
+        months: monthsInQ,
+        status: groupStatus(monthsInQ),
+        isYearTotal: false,
+      });
+    }
+    const yearMonths = all.filter(m => m.month.startsWith(year));
+    groups.push({
+      label: `إجمالي سنة ${year}`,
+      months: yearMonths,
+      status: groupStatus(yearMonths),
+      isYearTotal: true,
+    });
+  });
+
+  return groups;
+}
+
+function renderSummary(historical, forecast) {
+  const groups = buildQuarterGroups(historical, forecast);
+  if (!groups.length) { document.getElementById('summaryTable').innerHTML = ''; return; }
+
+  let h = `<table><thead><tr><th class="col-label">البند</th>`;
+  groups.forEach(g => {
+    const cls = g.isYearTotal ? 'col-ytotal' : (g.status === 'forecast' ? 'col-fcast' : g.status === 'mixed' ? 'col-partial' : 'col-hist');
+    h += `<th class="${cls}">${g.label}<br><span class="qstatus ${g.status}">${STATUS_LABEL[g.status]}</span></th>`;
+  });
+  h += `</tr></thead><tbody>`;
+
+  ROWS.forEach(row => {
+    if (row.type === 'divider') {
+      h += `<tr class="row-divider"><td class="col-label" colspan="${groups.length+1}">${row.label}</td></tr>`;
+      return;
+    }
+    h += `<tr class="${row.cls||''}"><td class="col-label">${row.label}</td>`;
+    groups.forEach(g => {
+      const sums   = sumGroup(g.months);
+      const cls    = g.isYearTotal ? 'col-ytotal' : (g.status === 'forecast' ? 'col-fcast' : g.status === 'mixed' ? 'col-partial' : 'col-hist');
+      const v      = sums[row.key] || 0;
+      const display = row.type === 'pct' ? pct(v) : fmt(v);
+      const numCls   = 'num' + (v < 0 ? ' neg' : '');
+      h += `<td class="${cls} ${numCls}">${display}</td>`;
+    });
+    h += `</tr>`;
+  });
+
+  h += `</tbody></table>`;
+  document.getElementById('summaryTable').innerHTML = h;
+}
+
 /* ── Chart ── */
 function renderChart(historical, forecast) {
   const histLabels  = historical.map(m => m.label);
@@ -630,6 +733,7 @@ async function loadData() {
     renderKpis(meta);
     renderTable(historical, forecast, meta.scenario);
     renderChart(historical, forecast);
+    renderSummary(historical, forecast);
 
     /* Print period */
     const firstMonth = historical[0]?.label  || '';

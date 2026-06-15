@@ -9,10 +9,6 @@ let _agView      = 'flat';  // 'flat' | 'grouped'
 
 const AG_FMT  = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const agFmt   = v => AG_FMT.format(+v || 0);
-const agFmtS  = v => {
-  const n = Math.abs(+v || 0);
-  return n >= 1e6 ? (v/1e6).toFixed(2)+' م' : n >= 1e3 ? (v/1e3).toFixed(1)+' ك' : agFmt(v);
-};
 const agEsc   = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
 /* ── Entry point — يُستدعى عند كل ضغطة على التاب ── */
@@ -141,7 +137,7 @@ async function _agLoad() {
     _agRender(data);
 
     if (status) {
-      status.textContent = `✅ ${data.totals.count} عميل | ${agFmtS(data.totals.balance)} ر.س | ${new Date().toLocaleTimeString('ar-SA')}`;
+      status.textContent = `✅ ${data.totals.count} عميل | ${agFmt(data.totals.balance)} ر.س | ${new Date().toLocaleTimeString('ar-SA')}`;
       status.style.color = '#1a7a3c';
     }
   } catch (err) {
@@ -229,7 +225,7 @@ function _agRenderCards(custs, selMap) {
     const rCls  = pOver < 20 ? 'ag-risk-g' : pOver < 50 ? 'ag-risk-y' : 'ag-risk-r';
     const rLbl  = pOver < 20 ? '✅ منخفضة' : pOver < 50 ? '⚠️ متوسطة' : '🔴 مرتفعة';
     const top3  = a.top.slice(0,3).map(t =>
-      `<div class="ag-card-top">${agEsc(t.name.slice(0,20))}: ${agFmtS(t.bal)}</div>`
+      `<div class="ag-card-top">${agEsc(t.name.slice(0,20))}: ${agFmt(t.bal)}</div>`
     ).join('');
     return `<div class="ag-card ${rCls}">
       <div class="ag-card-name" title="${agEsc(name)}">${agEsc(name)}</div>
