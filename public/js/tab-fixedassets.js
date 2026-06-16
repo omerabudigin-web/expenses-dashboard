@@ -164,9 +164,9 @@ table.fa-tbl .branch-badge{
   <div class="fa-brand">🏭 الأصول الثابتة<br><small style="font-size:.7rem;font-weight:400;color:#8a9bb5">تفاصيل حسب الفرع والتصنيف</small></div>
   <span class="fa-status" id="fa-status"></span>
   <div style="display:flex;gap:6px;flex-wrap:wrap">
-    <button class="fa-export-btn excel" onclick="_faExportExcel()">📊 Excel</button>
-    <button class="fa-export-btn pdf"   onclick="_faPrint('pdf')">📄 PDF</button>
-    <button class="fa-export-btn"       onclick="_faPrint('print')">🖨 طباعة</button>
+    <button class="fa-export-btn excel" id="fa-btn-excel">📊 Excel</button>
+    <button class="fa-export-btn pdf"   id="fa-btn-pdf">📄 PDF</button>
+    <button class="fa-export-btn"       id="fa-btn-print">🖨 طباعة</button>
   </div>
 </div>
 
@@ -176,8 +176,8 @@ table.fa-tbl .branch-badge{
   <label style="margin-right:12px">التصنيف:</label>
   <div class="fa-chip-group" id="fa-type-chips"></div>
   <input class="fa-search" id="fa-search" placeholder="بحث…" type="text">
-  <button onclick="_faExpandAll(true)"  style="margin-right:auto;background:transparent;border:1px solid #1e3a5f;color:#8a9bb5;border-radius:6px;padding:4px 12px;font-family:Tajawal,sans-serif;font-size:.8rem;cursor:pointer">توسيع الكل</button>
-  <button onclick="_faExpandAll(false)" style="background:transparent;border:1px solid #1e3a5f;color:#8a9bb5;border-radius:6px;padding:4px 12px;font-family:Tajawal,sans-serif;font-size:.8rem;cursor:pointer">طي الكل</button>
+  <button id="fa-btn-expand" style="margin-right:auto;background:transparent;border:1px solid #1e3a5f;color:#8a9bb5;border-radius:6px;padding:4px 12px;font-family:Tajawal,sans-serif;font-size:.8rem;cursor:pointer">توسيع الكل</button>
+  <button id="fa-btn-collapse" style="background:transparent;border:1px solid #1e3a5f;color:#8a9bb5;border-radius:6px;padding:4px 12px;font-family:Tajawal,sans-serif;font-size:.8rem;cursor:pointer">طي الكل</button>
 </div>
 
 <div class="fa-kpis" id="fa-kpis"></div>
@@ -235,6 +235,15 @@ table.fa-tbl .branch-badge{
     _faSearch = e.target.value.trim();
     _faRender();
   });
+
+  // Expand / collapse
+  wrap.querySelector('#fa-btn-expand').addEventListener('click',   () => _faExpandAll(true));
+  wrap.querySelector('#fa-btn-collapse').addEventListener('click', () => _faExpandAll(false));
+
+  // Export buttons
+  wrap.querySelector('#fa-btn-excel').addEventListener('click', () => _faExportExcel());
+  wrap.querySelector('#fa-btn-pdf').addEventListener('click',   () => _faPrint('pdf'));
+  wrap.querySelector('#fa-btn-print').addEventListener('click', () => _faPrint('print'));
 }
 
 /* ── Expand / collapse all ── */
@@ -310,7 +319,7 @@ function _faRender() {
 
     html += `
 <div class="fa-group">
-  <div class="fa-group-hdr" onclick="_faToggleGroup('${t.key}')">
+  <div class="fa-group-hdr" data-fakey="${t.key}">
     <span>${t.icon}</span>
     <span>${FA_ESC(t.label)}</span>
     <span class="fa-g-count">${list.length} أصل</span>
@@ -359,7 +368,16 @@ function _faRender() {
   });
 
   if (!html) html = `<div class="fa-empty">لا توجد أصول تطابق الفلتر المحدد</div>`;
-  wrap.querySelector('#fa-body').innerHTML = html;
+  const body = wrap.querySelector('#fa-body');
+  body.innerHTML = html;
+  // event delegation for group toggle headers
+  if (!body._faDelegated) {
+    body._faDelegated = true;
+    body.addEventListener('click', e => {
+      const hdr = e.target.closest('.fa-group-hdr[data-fakey]');
+      if (hdr) _faToggleGroup(hdr.dataset.fakey);
+    });
+  }
 }
 
 /* ── Toggle group ── */
