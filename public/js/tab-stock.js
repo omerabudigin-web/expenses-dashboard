@@ -5,12 +5,13 @@ const SK_FMT  = n => (+n||0).toLocaleString('en-US', { minimumFractionDigits:2, 
 const SK_FMTQ = n => (+n||0).toLocaleString('en-US', { minimumFractionDigits:3, maximumFractionDigits:3 });
 const SK_ESC  = s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
-let _skData    = null;
-let _skBranch  = 0;
-let _skCat     = 'all';
-let _skSearch  = '';
-let _skSort    = { col:'value', dir:'desc' };
-let _skChart   = null;
+let _skData      = null;
+let _skGlBalance = null;
+let _skBranch    = 0;
+let _skCat       = 'all';
+let _skSearch    = '';
+let _skSort      = { col:'value', dir:'desc' };
+let _skChart     = null;
 
 /* ── Entry point ── */
 async function renderStockTab() {
@@ -24,10 +25,11 @@ async function renderStockTab() {
   try {
     const data = await fetch(`/api/stock?db=${encodeURIComponent(db)}`).then(r => r.json());
     if (data.error) throw new Error(data.error);
-    _skData = data;
+    _skData      = data.items;
+    _skGlBalance = data.glBalance;
     _skBuildCatChips(wrap);
     _skRender();
-    _skSetStatus(`✅ ${[...new Set(data.map(r=>r.itemId))].length} صنف | ${new Date().toLocaleTimeString('ar-SA')}`, '#1a7a3c');
+    _skSetStatus(`✅ ${[...new Set(_skData.map(r=>r.itemId))].length} صنف | ${new Date().toLocaleTimeString('ar-SA')}`, '#1a7a3c');
   } catch(err) {
     _skSetStatus('❌ ' + err.message, '#c0392b');
     const body = wrap.querySelector('#sk-body');
@@ -59,7 +61,7 @@ function _skBuildShell(wrap) {
 
 .sk-kpis{display:flex;gap:12px;padding:14px 18px;flex-wrap:wrap}
 .sk-kpi{background:#162032;border:1px solid #1e3a5f;border-radius:10px;padding:12px 20px;min-width:160px;text-align:center;position:relative;overflow:hidden}
-.sk-kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:#27ae60}
+.sk-kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--kpi-color,#27ae60)}
 .sk-kpi label{display:block;font-size:.75rem;color:#8a9bb5;margin-bottom:4px}
 .sk-kpi .sk-val{font-size:1.2rem;font-weight:800;color:#27ae60;font-family:'Cairo',sans-serif}
 
@@ -235,9 +237,25 @@ function _skRender() {
   const totValue = items.reduce((s,r)=>s+r.value,0);
   const totQty   = items.reduce((s,r)=>s+r.qty,0);
   const branches = [...new Set(_skData.filter(r=>!_skBranch||r.branch===_skBranch).map(r=>r.branchName))].length;
+  const showGl = _skGlBalance != null && !_skBranch && _skCat === 'all' && !_skSearch;
+  const mainValue  = showGl ? _skGlBalance : totValue;
+  const mainLabel  = showGl ? 'رصيد المخزون (ر.س)' : 'إجمالي القيمة (ر.س)';
+  const mainNote   = showGl ? '<div style="font-size:.67rem;color:#8a9bb5;margin-top:2px">رصيد حساب مخزون السلع الجاهزة — دفتر الأستاذ</div>' : '';
+  const estCard    = showGl
+    ? `<div class="sk-kpi" style="--kpi-color:#5a8fb5">
+        <label>القيمة المحسوبة من الأسعار (ر.س)</label>
+        <div class="sk-val" style="color:#5a8fb5;font-size:1rem">${SK_FMT(totValue)}</div>
+        <div style="font-size:.67rem;color:#8a9bb5;margin-top:2px">مجموع سعر التكلفة × الكمية</div>
+       </div>`
+    : '';
   wrap.querySelector('#sk-kpis').innerHTML = `
     <div class="sk-kpi"><label>عدد الأصناف</label><div class="sk-val">${totItems}</div></div>
-    <div class="sk-kpi"><label>إجمالي القيمة (ر.س)</label><div class="sk-val">${SK_FMT(totValue)}</div></div>
+    <div class="sk-kpi" style="--kpi-color:#27ae60">
+      <label>${mainLabel}</label>
+      <div class="sk-val">${SK_FMT(mainValue)}</div>
+      ${mainNote}
+    </div>
+    ${estCard}
     <div class="sk-kpi"><label>عدد الفروع</label><div class="sk-val">${branches}</div></div>
     <div class="sk-kpi"><label>آخر تحديث</label><div class="sk-val" style="font-size:.9rem">${new Date().toLocaleDateString('ar-SA')}</div></div>
   `;
@@ -308,8 +326,10 @@ function _skRender() {
     });
   }
 
+  const footerTotal = showGl ? _skGlBalance : totValue;
+  const footerLabel = showGl ? 'رصيد المخزون (دفتر الأستاذ)' : 'إجمالي القيمة';
   wrap.querySelector('#sk-footer').innerHTML =
-    `<span>${totItems} صنف معروض</span><span>إجمالي القيمة: <strong style="color:#27ae60">${SK_FMT(totValue)} ر.س</strong></span>`;
+    `<span>${totItems} صنف معروض</span><span>${footerLabel}: <strong style="color:#27ae60">${SK_FMT(footerTotal)} ر.س</strong></span>`;
 }
 
 /* ── Donut chart ── */
