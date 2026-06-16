@@ -123,11 +123,51 @@ table.fa-tbl .branch-badge{
 }
 .fa-group-total td{background:#111e2d;font-weight:700;color:#d4a017;border-top:2px solid #1e3a5f}
 .fa-empty{padding:40px;text-align:center;color:#5a7a9a}
+
+.fa-export-btn{
+  padding:5px 14px;border-radius:6px;font-family:Tajawal,sans-serif;font-size:.82rem;
+  cursor:pointer;border:1px solid #1e3a5f;background:transparent;color:#8a9bb5;transition:.15s;
+}
+.fa-export-btn:hover{border-color:#d4a017;color:#d4a017}
+.fa-export-btn.excel{border-color:#27ae60;color:#27ae60}
+.fa-export-btn.excel:hover{background:#0d2a1a}
+.fa-export-btn.pdf{border-color:#c0392b;color:#e74c3c}
+.fa-export-btn.pdf:hover{background:#2a0d0d}
+
+@media print{
+  body{background:#fff!important;color:#000!important}
+  .tab-bar,.conn-bar,.sidebar,.fa-toolbar,.fa-filters,.fa-kpis,
+  .fa-chevron,.fa-export-btn,#fa-status,button{display:none!important}
+  .wrap,.fa-body{padding:0!important;background:#fff!important}
+  .fa-group{border:1px solid #ccc!important;margin-bottom:6px!important;break-inside:avoid}
+  .fa-group-hdr{background:#1a3a6a!important;color:#fff!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;padding:6px 10px!important}
+  .fa-group-rows{display:block!important}
+  table.fa-tbl th{background:#dde6f4!important;color:#111!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;font-size:8pt!important;padding:4px 6px!important}
+  table.fa-tbl td{font-size:8pt!important;padding:4px 6px!important;color:#111!important;border-bottom:1px solid #ddd!important}
+  .fa-group-total td{background:#f4f7fb!important;font-weight:700!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .branch-badge{background:#dde6f4!important;color:#1a3a6a!important;border:none!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .fa-print-header{display:block!important}
+}
+.fa-print-header{display:none;text-align:center;margin-bottom:16px;font-family:Tajawal,sans-serif}
+.fa-print-header h2{font-size:16pt;margin:0 0 4px}
+.fa-print-header p{font-size:9pt;color:#555;margin:2px 0}
 </style>
+
+<div class="fa-print-header" id="fa-print-header">
+  <h2>🏭 جدول الأصول الثابتة</h2>
+  <p id="fa-ph-company"></p>
+  <p id="fa-ph-filter"></p>
+  <p id="fa-ph-date"></p>
+</div>
 
 <div class="fa-toolbar">
   <div class="fa-brand">🏭 الأصول الثابتة<br><small style="font-size:.7rem;font-weight:400;color:#8a9bb5">تفاصيل حسب الفرع والتصنيف</small></div>
   <span class="fa-status" id="fa-status"></span>
+  <div style="display:flex;gap:6px;flex-wrap:wrap">
+    <button class="fa-export-btn excel" onclick="_faExportExcel()">📊 Excel</button>
+    <button class="fa-export-btn pdf"   onclick="_faPrint('pdf')">📄 PDF</button>
+    <button class="fa-export-btn"       onclick="_faPrint('print')">🖨 طباعة</button>
+  </div>
 </div>
 
 <div class="fa-filters">
@@ -339,4 +379,238 @@ function _faToggleGroup(key) {
 function _faSetStatus(msg, color) {
   const el = document.getElementById('fa-status');
   if (el) { el.textContent = msg; el.style.color = color; }
+}
+
+/* ── Shared: build filtered asset list (same logic as _faRender) ── */
+function _faGetFilteredGroups() {
+  if (!_faData) return null;
+  const wrap = document.getElementById('tab-fixedassets');
+  const activeTypeChip = wrap?.querySelector('#fa-type-chips .fa-chip.active');
+  const typeFilter = activeTypeChip ? activeTypeChip.dataset.type : 'all';
+
+  let rows = _faData.filter(r => r.bookValue > 0 || r.jvLines > 0);
+  if (_faFilter) rows = rows.filter(r => r.branch === _faFilter);
+  if (_faSearch) {
+    const q = _faSearch.toLowerCase();
+    rows = rows.filter(r => (r.nameAr||'').toLowerCase().includes(q));
+  }
+
+  const byId = new Map();
+  rows.forEach(r => {
+    if (!byId.has(r.id)) byId.set(r.id, { ...r, branches: [] });
+    const e = byId.get(r.id);
+    e.branches.push({ branch: r.branch, branchName: r.branchName, bookValue: r.bookValue, accumDepr: r.accumDepr, netBookValue: r.netBookValue });
+    if (e.branches.length > 1) {
+      e.bookValue    = e.branches.reduce((s,b)=>s+b.bookValue,0);
+      e.accumDepr    = e.branches.reduce((s,b)=>s+b.accumDepr,0);
+      e.netBookValue = e.branches.reduce((s,b)=>s+b.netBookValue,0);
+    }
+  });
+  const assets = [...byId.values()];
+
+  const grouped = new Map();
+  FA_TYPES.forEach(t => grouped.set(t.key, []));
+  assets.forEach(a => grouped.get(faTypeOf(a.nameAr)).push(a));
+
+  const groups = FA_TYPES
+    .filter(t => typeFilter === 'all' || typeFilter === t.key)
+    .map(t => ({ ...t, list: grouped.get(t.key) || [] }))
+    .filter(g => g.list.length > 0);
+
+  const totValue = assets.reduce((s,a)=>s+a.bookValue,0);
+  const totDepr  = assets.reduce((s,a)=>s+a.accumDepr,0);
+  const totNet   = assets.reduce((s,a)=>s+a.netBookValue,0);
+  return { groups, assets, totValue, totDepr, totNet };
+}
+
+/* ── Print / PDF ── */
+function _faPrint(mode) {
+  if (!_faData) { alert('لا توجد بيانات'); return; }
+
+  const BRANCH_NAMES = { 0:'كل الفروع', 1:'الفرع الرئيسي', 2:'مصنع حوراء', 3:'شقق داماس الرياض', 4:'شقق داماس خميس مشيط', 5:'فندق واحة جدة' };
+  const company = State.get('companyName') || '';
+  const branch  = BRANCH_NAMES[_faFilter] || 'كل الفروع';
+  const dateStr = new Date().toLocaleDateString('ar-SA', { year:'numeric', month:'long', day:'numeric' });
+
+  const phCompany = document.getElementById('fa-ph-company');
+  const phFilter  = document.getElementById('fa-ph-filter');
+  const phDate    = document.getElementById('fa-ph-date');
+  if (phCompany) phCompany.textContent = company;
+  if (phFilter)  phFilter.textContent  = `الفرع: ${branch}` + (_faSearch ? ` | بحث: ${_faSearch}` : '');
+  if (phDate)    phDate.textContent    = `تاريخ الطباعة: ${dateStr}`;
+
+  // Expand all groups for printing
+  FA_TYPES.forEach(t => _faExpanded.add(t.key));
+  _faRender();
+
+  if (mode === 'pdf') {
+    // hint browser to show Save-as-PDF dialog
+    document.title = `الأصول الثابتة — ${branch} — ${dateStr}`;
+  }
+  window.print();
+}
+
+/* ── Excel export ── */
+async function _faExportExcel() {
+  if (!_faData) { alert('لا توجد بيانات'); return; }
+  if (typeof ExcelJS === 'undefined') { alert('مكتبة ExcelJS لم تُحمَّل بعد، جرّب تحديث الصفحة'); return; }
+
+  const d = _faGetFilteredGroups();
+  if (!d) return;
+  const { groups, totValue, totDepr, totNet } = d;
+
+  const BRANCH_NAMES = { 0:'كل الفروع', 1:'الفرع الرئيسي', 2:'مصنع حوراء', 3:'شقق داماس الرياض', 4:'شقق داماس خميس مشيط', 5:'فندق واحة جدة' };
+  const company = State.get('companyName') || 'مؤسسة أبعاد الحديد التجارية';
+  const branch  = BRANCH_NAMES[_faFilter] || 'كل الفروع';
+  const dateStr = new Date().toLocaleDateString('ar-SA', { year:'numeric', month:'long', day:'numeric' });
+  const numFmt  = '#,##0.00';
+
+  const CLR = {
+    navy    : 'FF0A2040',
+    navyMid : 'FF1A3A6A',
+    blueLight:'FFE8EEF8',
+    bluePale :'FFF4F7FB',
+    gold    : 'FFD4A017',
+    white   : 'FFFFFFFF',
+    green   : 'FF1a7a3c',
+    greenPale:'FFe6f4ec',
+  };
+  const FONT = 'Calibri';
+
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'MekSoft ERP Dashboard';
+  wb.created = new Date();
+
+  const ws = wb.addWorksheet('الأصول الثابتة', { views: [{ rightToLeft: true }] });
+  ws.pageSetup.paperSize   = 9;   // A4
+  ws.pageSetup.orientation = 'landscape';
+  ws.pageSetup.fitToPage   = true;
+  ws.pageSetup.fitToWidth  = 1;
+  ws.pageSetup.margins = { left:0.5, right:0.5, top:0.75, bottom:0.75, header:0.3, footer:0.3 };
+
+  ws.columns = [
+    { width: 42 },  // اسم الأصل
+    { width: 14 },  // تاريخ الاقتناء
+    { width: 22 },  // الفرع
+    { width: 18 },  // التكلفة
+    { width: 18 },  // إهلاك متراكم
+    { width: 18 },  // صافي الدفتري
+  ];
+
+  const hdrFill = { type:'pattern', pattern:'solid', fgColor:{ argb: CLR.navy } };
+  const hdrFont = { name:FONT, bold:true, color:{ argb:CLR.white }, size:10 };
+  const grpFill = { type:'pattern', pattern:'solid', fgColor:{ argb: CLR.navyMid } };
+  const grpFont = { name:FONT, bold:true, color:{ argb:CLR.white }, size:10 };
+  const totFill = { type:'pattern', pattern:'solid', fgColor:{ argb: CLR.blueLight } };
+  const totFont = { name:FONT, bold:true, color:{ argb:'FF0A2040' }, size:10 };
+  const grandFill= { type:'pattern', pattern:'solid', fgColor:{ argb: CLR.navy } };
+  const grandFont= { name:FONT, bold:true, color:{ argb:CLR.gold }, size:11 };
+  const numAlign = { horizontal:'right', vertical:'middle' };
+  const cenAlign = { horizontal:'center', vertical:'middle' };
+  const rtlAlign = { horizontal:'right', vertical:'middle', readingOrder:2 };
+
+  // ── Title ──────────────────────────────────────────────────────────────────
+  const r1 = ws.addRow(['جدول الأصول الثابتة', '', '', '', '', '']);
+  ws.mergeCells(`A${r1.number}:F${r1.number}`);
+  r1.getCell('A').font  = { name:FONT, bold:true, size:16, color:{ argb:CLR.navy } };
+  r1.getCell('A').alignment = cenAlign;
+  r1.height = 28;
+
+  const r2 = ws.addRow([company, '', '', '', '', '']);
+  ws.mergeCells(`A${r2.number}:F${r2.number}`);
+  r2.getCell('A').font = { name:FONT, size:11, color:{ argb:'FF334466' } };
+  r2.getCell('A').alignment = cenAlign;
+
+  const r3 = ws.addRow([`الفرع: ${branch}   |   تاريخ التقرير: ${dateStr}`, '', '', '', '', '']);
+  ws.mergeCells(`A${r3.number}:F${r3.number}`);
+  r3.getCell('A').font = { name:FONT, size:10, color:{ argb:'FF667788' } };
+  r3.getCell('A').alignment = cenAlign;
+  r3.height = 18;
+
+  ws.addRow([]);
+
+  // ── Column headers ─────────────────────────────────────────────────────────
+  const hRow = ws.addRow(['اسم الأصل', 'تاريخ الاقتناء', 'الفرع', 'التكلفة (ر.س)', 'إهلاك متراكم (ر.س)', 'صافي القيمة (ر.س)']);
+  hRow.height = 22;
+  hRow.eachCell(c => {
+    c.fill = hdrFill; c.font = hdrFont;
+    c.alignment = cenAlign;
+    c.border = { bottom:{ style:'thin', color:{ argb:CLR.gold } } };
+  });
+  hRow.getCell(1).alignment = rtlAlign;
+
+  // ── Data groups ────────────────────────────────────────────────────────────
+  groups.forEach(g => {
+    // group header
+    const gTotal  = g.list.reduce((s,a)=>s+a.bookValue,0);
+    const gNet    = g.list.reduce((s,a)=>s+a.netBookValue,0);
+    const gRow = ws.addRow([`${g.icon}  ${g.label}  (${g.list.length} أصل)`, '', '', gTotal, '', gNet]);
+    ws.mergeCells(`A${gRow.number}:C${gRow.number}`);
+    gRow.height = 20;
+    gRow.eachCell((c,i) => {
+      c.fill = grpFill; c.font = grpFont;
+      c.alignment = i <= 3 ? rtlAlign : numAlign;
+      if (i >= 4) c.numFmt = numFmt;
+    });
+
+    // asset rows
+    g.list.forEach(a => {
+      const branchStr = a.branches.map(b=>b.branchName||'').filter(Boolean).join(' / ') || '—';
+      const dRow = ws.addRow([a.nameAr, a.acquisitionDate||'—', branchStr, a.bookValue, a.accumDepr||0, a.netBookValue]);
+      dRow.height = 17;
+      dRow.getCell(1).alignment = rtlAlign;
+      dRow.getCell(2).alignment = cenAlign;
+      dRow.getCell(3).alignment = rtlAlign;
+      dRow.getCell(4).numFmt = numFmt; dRow.getCell(4).alignment = numAlign;
+      dRow.getCell(5).numFmt = numFmt; dRow.getCell(5).alignment = numAlign;
+      dRow.getCell(6).numFmt = numFmt; dRow.getCell(6).alignment = numAlign;
+      dRow.getCell(1).font = { name:FONT, size:10 };
+      dRow.getCell(2).font = { name:FONT, size:10, color:{ argb:'FF667788' } };
+      dRow.getCell(3).font = { name:FONT, size:10, color:{ argb:'FF334466' } };
+      dRow.getCell(4).font = { name:FONT, size:10, bold:true, color:{ argb:'FF0A2040' } };
+      dRow.getCell(5).font = { name:FONT, size:10, color:{ argb:'FF445566' } };
+      dRow.getCell(6).font = { name:FONT, size:10, bold:true, color:{ argb:'FF1a7a3c' } };
+      // alternating fill
+      const altFill = { type:'pattern', pattern:'solid', fgColor:{ argb: CLR.bluePale } };
+      if (g.list.indexOf(a) % 2 === 1) [1,2,3,4,5,6].forEach(i => { dRow.getCell(i).fill = altFill; });
+    });
+
+    // subtotal row
+    const sRow = ws.addRow([`إجمالي ${g.label}`, '', '', gTotal, 0, gNet]);
+    ws.mergeCells(`A${sRow.number}:C${sRow.number}`);
+    sRow.height = 18;
+    sRow.eachCell((c,i) => {
+      c.fill = totFill; c.font = totFont;
+      c.alignment = i <= 3 ? rtlAlign : numAlign;
+      if (i >= 4) c.numFmt = numFmt;
+      c.border = { top:{ style:'thin', color:{ argb:CLR.navyMid } } };
+    });
+
+    ws.addRow([]);
+  });
+
+  // ── Grand total ────────────────────────────────────────────────────────────
+  const gtRow = ws.addRow(['الإجمالي الكلي', '', '', totValue, totDepr, totNet]);
+  ws.mergeCells(`A${gtRow.number}:C${gtRow.number}`);
+  gtRow.height = 24;
+  gtRow.eachCell((c,i) => {
+    c.fill = grandFill; c.font = grandFont;
+    c.alignment = i <= 3 ? rtlAlign : numAlign;
+    if (i >= 4) c.numFmt = numFmt;
+    c.border = { top:{ style:'medium', color:{ argb:CLR.gold } }, bottom:{ style:'medium', color:{ argb:CLR.gold } } };
+  });
+
+  // ── Save ───────────────────────────────────────────────────────────────────
+  try {
+    const buf  = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buf], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url;
+    a.download = `الأصول_الثابتة_${branch}_${new Date().toISOString().slice(0,10)}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch(e) {
+    alert('خطأ في التصدير: ' + e.message);
+  }
 }
