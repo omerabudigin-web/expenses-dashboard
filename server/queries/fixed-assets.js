@@ -18,7 +18,10 @@ async function getFixedAssets(dbName) {
     FROM FixedAsset fa
     LEFT JOIN FixedAssetCategory fac ON fac.ID = fa.Category
     LEFT JOIN JournalVoucherDetail jd ON jd.FixedAsset = fa.Id
+    LEFT JOIN AccountChart ac ON ac.ID = jd.AccountChart
     LEFT JOIN Branch b ON b.Id = jd.Branch
+    -- فقط حسابات الأصول (كود يبدأ بـ 1) — يستثني المصروفات والإهلاك
+    WHERE jd.ID IS NULL OR ac.Code LIKE '1%'
     GROUP BY
       fa.Id, fa.NameAr, fa.Category, fac.NameAr,
       fa.AcquisitionDate, jd.Branch, b.NameAr
