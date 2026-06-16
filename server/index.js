@@ -20,6 +20,7 @@ const { getBudget }                                            = require('./quer
 const { getCashFlowBudget }                                    = require('./queries/cashflow');
 const { getAgingData }                                         = require('./queries/aging');
 const { getFixedAssets }                                       = require('./queries/fixed-assets');
+const { getStockData }                                         = require('./queries/stock');
 
 const app        = express();
 const PORT       = parseInt(process.env.PORT, 10)             || 3001;
@@ -627,6 +628,18 @@ app.get('/api/fixed-assets', async (req, res) => {
     res.json(data);
   } catch (err) {
     console.error('[api/fixed-assets]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /api/stock?db= ────────────────────────────────────────────────────────
+app.get('/api/stock', async (req, res) => {
+  const dbName = resolveDb(req.query);
+  try {
+    const data = await getStockData(dbName);
+    res.json(data);
+  } catch (err) {
+    console.error('[api/stock]', err.message);
     res.status(500).json({ error: err.message });
   }
 });
