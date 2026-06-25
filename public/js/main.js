@@ -19,15 +19,16 @@
   else if (name === 'is')          renderIncomeStatement();
   else if (name === 'safety')      renderSafetyInventory();
   else if (name === 'aging')       renderAgingTab();
+  else if (name === 'ap-aging')    renderAPAgingTab();
   else if (name === 'fixedassets') renderFixedAssetsTab();
   else if (name === 'stock')      renderStockTab();
   else if (name === 'finmodel')    renderFinancialModel();
   else if (name === 'inventory')     renderInventoryAnalysis();
   else if (name === 'manufacturing') renderManufacturing();
-  else if (name === 'coils') {
-    const fr = document.getElementById('coils-iframe');
-    if (fr && !fr.src.includes('coils-analysis-2026')) fr.src = '/coils-analysis-2026.html';
-  }
+  else if (name === 'coils')     renderCoilsTab();
+  else if (name === 'sales-inv') renderSalesInvoicesTab();
+  else if (name === 'ccc')       renderCCCTab();
+  else if (name === 'forecast')  renderForecastTab();
 }
 
 // ── Connection status indicator ───────────────────────────────────────────────
@@ -232,6 +233,7 @@ async function init() {
   const consPdfBtn  = document.getElementById('cons-pdf-btn');
   if (consPdfBtn)  consPdfBtn.addEventListener('click', printConsPDF);
   if (consCfRefresh) consCfRefresh.addEventListener('click', () => {
+    _consCfStopTimer();
     State.set('consolidated', null);
     State.set('consCfFrom', null);
     State.set('consCfTo',   null);
@@ -244,6 +246,7 @@ async function init() {
   // Consolidated tab refresh button
   const consRefreshBtn = document.getElementById('cons-refresh-btn');
   if (consRefreshBtn) consRefreshBtn.addEventListener('click', () => {
+    _consStopTimer();
     State.set('consolidated', null);
     State.set('consFrom', null);
     State.set('consTo', null);

@@ -1,6 +1,32 @@
 ﻿// ── CFO Executive Dashboard ───────────────────────────────────────────────────
 
 let _cfoTrendChart = null;
+let _cfoTimer      = null;
+let _cfoCountdown  = 0;
+const CFO_REFRESH_SEC = 60;
+function _cfoIsActive() { return !!document.querySelector('.tab.active[data-tab="cfo"]'); }
+function _cfoStopTimer() { if (_cfoTimer) { clearInterval(_cfoTimer); _cfoTimer = null; } }
+function _cfoStartCountdown(lastMo, revenue, netMargin) {
+  _cfoStopTimer();
+  _cfoCountdown = CFO_REFRESH_SEC;
+  const el = document.getElementById('cfo-status');
+  const fmM = v => ((+v||0)/1e6).toFixed(2) + ' م';
+  const tick = () => {
+    if (!el) return;
+    const revTxt = revenue != null ? ` | إيرادات: ${fmM(revenue)}` : '';
+    const nmTxt  = netMargin != null && isFinite(netMargin) ? ` | هامش: ${netMargin.toFixed(1)}%` : '';
+    if (_cfoCountdown > 0) {
+      el.textContent = `✅ آخر فترة: ${lastMo}${revTxt}${nmTxt} | ${new Date().toLocaleTimeString('ar-SA')} · تحديث بعد ${_cfoCountdown}ث`;
+      el.style.color = '#1a7a3c';
+    }
+  };
+  tick();
+  _cfoTimer = setInterval(() => {
+    if (!_cfoIsActive()) { _cfoStopTimer(); return; }
+    _cfoCountdown = Math.max(0, _cfoCountdown - 1);
+    tick();
+  }, 1000);
+}
 
 function _cfoGetPlFrom(quick, lastMo, allMths) {
   if (!lastMo || quick === 'all') return null;
@@ -375,6 +401,8 @@ function renderCFODashboard() {
           ${a.impact ? `<div style="margin-top:7px;font-size:.75rem;color:#506070">🎯 الأثر المتوقع: <span style="color:#a0c4e8">${a.impact}</span></div>` : ''}
         </div>
       </div>`).join('');
+
+  _cfoStartCountdown(lastMo, c?.revenue, r.netMargin);
 }
 
 // ── CFO Dashboard exports ─────────────────────────────────────────────────────

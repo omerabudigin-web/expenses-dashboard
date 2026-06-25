@@ -1,5 +1,38 @@
 ﻿// ── INCOME STATEMENT TAB (قائمة الدخل الشامل — Saudi IFRS/SOCPA) ─────────────
 
+let _isTimer     = null;
+let _isCountdown = 0;
+let _isChart     = null;
+const IS_REFRESH_SEC = 60;
+
+function _isIsActive() { return !!document.querySelector('.tab.active[data-tab="is"]'); }
+function _isStopTimer() { if (_isTimer) { clearInterval(_isTimer); _isTimer = null; } }
+function _isStartCountdown(rowCount) {
+  _isStopTimer();
+  _isCountdown = IS_REFRESH_SEC;
+  const el = document.getElementById('is-status');
+  const tick = () => {
+    if (!el) return;
+    if (_isCountdown > 0) {
+      el.textContent = `✅ ${rowCount} حساب | ${new Date().toLocaleTimeString('ar-SA')} · تحديث بعد ${_isCountdown}ث`;
+      el.style.color = '#1a7a3c';
+    } else {
+      el.textContent = `⏳ جارٍ إعادة التحميل...`;
+      el.style.color = '#8a7a3c';
+    }
+  };
+  tick();
+  _isTimer = setInterval(() => {
+    if (!_isIsActive()) { _isStopTimer(); return; }
+    _isCountdown = Math.max(0, _isCountdown - 1);
+    tick();
+    if (_isCountdown === 0) {
+      _isStopTimer();
+      fetchIncomeStatement();
+    }
+  }, 1000);
+}
+
 let _isData       = null;
 let _isCmpData    = null;   // comparison period (same period, previous year)
 let _isInited     = false;
@@ -157,7 +190,7 @@ async function fetchIncomeStatement() {
     _isData    = rows;
     _isCmpData = cmpRows;
     _renderISRows();
-    statusEl.textContent = `${rows.length} حساب${cmpRows ? ' + مقارنة' : ''}`;
+    _isStartCountdown(rows.length);
   } catch (e) {
     tbodyEl.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:32px;color:#da4a4a">خطأ: ${esc(e.message)}</td></tr>`;
     statusEl.textContent = 'فشل التحميل';
@@ -349,8 +382,13 @@ function renderIncomeStatement() {
   initIncomeStatement();
   _isPopulateBranches();
   _isUpdateBreadcrumb();
-  if (_isTreeMode) { if (_isTreeData) _renderISTree(); }
-  else              { if (_isData)     _renderISRows(); }
+  if (_isTreeMode) {
+    if (_isTreeData) _renderISTree();
+    else fetchIncomeStatementTree();
+  } else {
+    if (_isData) { _renderISRows(); _isStartCountdown(_isData.length); }
+    else fetchIncomeStatement();
+  }
 }
 
 window._isDrillIn = function(code, name) {
@@ -593,6 +631,51 @@ function _renderISRows() {
         ? `  |  مقارنة: ${netCmpProfit >= 0 ? fmt(netCmpProfit,2) : '('+fmt(-netCmpProfit,2)+')'} ر.س`
         : ''}`;
   }
+
+  _isRenderChart(revRows, expRows, totalRevNet, totalExpNet, netProfit);
+}
+
+function _isRenderChart(revRows, expRows, totalRevNet, totalExpNet, netProfit) {
+  const wrap   = document.getElementById('is-chart-wrap');
+  const canvas = document.getElementById('chart-is');
+  if (!wrap || !canvas || typeof Chart === 'undefined') return;
+
+  // Top 5 revenue + top 5 expense accounts by absolute net, plus totals bar
+  const topRev = [...revRows].sort((a,b) => b.net - a.net).slice(0, 5);
+  const topExp = [...expRows].sort((a,b) => b.net - a.net).slice(0, 5);
+
+  if (!topRev.length && !topExp.length) { wrap.style.display = 'none'; return; }
+  wrap.style.display = 'block';
+
+  const labels = [
+    ...topRev.map(r => r.name.length > 22 ? r.name.slice(0, 22) + '…' : r.name),
+    ...topExp.map(r => r.name.length > 22 ? r.name.slice(0, 22) + '…' : r.name),
+  ];
+  const revData = [...topRev.map(r => r.net), ...topExp.map(() => 0)];
+  const expData = [...topRev.map(() => 0),    ...topExp.map(r => r.net)];
+
+  if (_isChart) { _isChart.destroy(); _isChart = null; }
+  _isChart = new Chart(canvas.getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'إيرادات', data: revData, backgroundColor: '#27ae6099', borderWidth: 0, borderRadius: 4 },
+        { label: 'مصروفات', data: expData, backgroundColor: '#c0392b88', borderWidth: 0, borderRadius: 4 },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+      plugins: {
+        legend: { display: true, position: 'top', labels: { color: '#8ba0b8', font: { size: 10 }, boxWidth: 12 } },
+        tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${fmt(ctx.raw, 0)} ر.س` } },
+      },
+      scales: {
+        x: { ticks: { color: '#5a7a9a', font: { size: 9 }, callback: v => fmt(v, 0) }, grid: { color: '#1a2a3a' } },
+        y: { ticks: { color: '#8ba0b8', font: { size: 9 } }, grid: { color: '#1a2a3a22' } },
+      },
+    },
+  });
 }
 
 async function exportISExcel() {

@@ -1,5 +1,37 @@
 ﻿// ── CASH FLOW tab ─────────────────────────────────────────────────────────────
 
+let _cfTimer     = null;
+let _cfCountdown = 0;
+let _cfLastAllCF = null;
+const CF_REFRESH_SEC = 60;
+
+function _cfIsActive() { return !!document.querySelector('.tab.active[data-tab="cf"]'); }
+function _cfStopTimer() { if (_cfTimer) { clearInterval(_cfTimer); _cfTimer = null; } }
+function _cfUpdateStatus() {
+  const el = document.getElementById('cf-status');
+  if (!el) return;
+  const months = _cfLastAllCF ? _cfLastAllCF.length : 0;
+  const latestOp = _cfLastAllCF?.length ? _cfLastAllCF[_cfLastAllCF.length - 1].operatingCF : null;
+  const opTxt = latestOp !== null ? ` | آخر شهر تشغيلي: ${fmtPlNum(latestOp)} ر.س` : '';
+  if (_cfCountdown > 0) {
+    el.textContent = `✅ ${months} شهر${opTxt} | ${new Date().toLocaleTimeString('ar-SA')} · تحديث بعد ${_cfCountdown}ث`;
+    el.style.color = '#1a7a3c';
+  } else {
+    el.textContent = `⏳ جارٍ انتظار بيانات جديدة من الخادم...`;
+    el.style.color = '#8a7a3c';
+  }
+}
+function _cfStartCountdown() {
+  _cfStopTimer();
+  _cfCountdown = CF_REFRESH_SEC;
+  _cfUpdateStatus();
+  _cfTimer = setInterval(() => {
+    if (!_cfIsActive()) { _cfStopTimer(); return; }
+    _cfCountdown = Math.max(0, _cfCountdown - 1);
+    _cfUpdateStatus();
+  }, 1000);
+}
+
 // Indirect method: derives monthly CF from BS balance changes + P&L net income.
 // Signs follow Saudi SME / IFRS for SMEs Section 7:
 //   Asset accounts (debit-normal): balance increase = cash outflow → negate Δ
@@ -237,11 +269,15 @@ function renderCF() {
     ['cf-kpis','cf-statement-body','cf-monthly-tbody'].forEach(id => {
       const el = document.getElementById(id); if (el) el.innerHTML = '';
     });
+    const st = document.getElementById('cf-status');
+    if (st) { st.textContent = '⏳ جارٍ تحميل البيانات...'; st.style.color = '#5a7a9a'; }
     return;
   }
+  _cfStopTimer();
 
   buildCFPeriodOptions();
   const allCF   = cfMonthly(bs, pl, State.get('bankFacilities') || []);
+  _cfLastAllCF  = allCF;
   const period  = (document.getElementById('cf-period-sel') || {}).value || 'all';
   const cmpMode = (document.getElementById('cf-cmp-sel')    || {}).value || 'prev';
 
@@ -336,6 +372,8 @@ function renderCF() {
       <td class="num">${fmt(m.closingCash)}</td>
     </tr>`;
   }).join('') || '<tr><td colspan="7" style="text-align:center;padding:30px;color:#5a7a9a">لا توجد بيانات</td></tr>';
+
+  _cfStartCountdown();
 }
 
 async function exportCFExcel() {

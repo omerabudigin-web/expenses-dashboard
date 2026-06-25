@@ -29,6 +29,32 @@ let _fmPartial   = null; // partial (current) month or null
 let _fmFcast     = [];   // 6-month forecast from API
 let _fmMeta      = {};   // combined meta
 
+let _fmTimer     = null;
+let _fmCountdown = 0;
+const FM_REFRESH_SEC = 60;
+function _fmIsActive()  { return !!document.querySelector('.tab.active[data-tab="finmodel"]'); }
+function _fmStopTimer() { if (_fmTimer) { clearInterval(_fmTimer); _fmTimer = null; } }
+function _fmStartCountdown() {
+  _fmStopTimer();
+  _fmCountdown = FM_REFRESH_SEC;
+  const updatedAt = new Date().toLocaleTimeString('ar-SA');
+  const tick = () => {
+    const el = document.getElementById('fm-last-updated');
+    if (!el) return;
+    if (_fmCountdown > 0) {
+      el.textContent = `✅ آخر تحديث: ${updatedAt} · تحديث بعد ${_fmCountdown}ث`;
+      el.style.color = '#1a7a3c';
+    }
+  };
+  tick();
+  _fmTimer = setInterval(() => {
+    if (!_fmIsActive()) { _fmStopTimer(); return; }
+    _fmCountdown = Math.max(0, _fmCountdown - 1);
+    tick();
+    if (_fmCountdown === 0) { _fmStopTimer(); _fmRefresh(); }
+  }, 1000);
+}
+
 /* ── Entry point (called from main.js on tab switch) ── */
 async function renderFinancialModel() {
   if (_fmRendered) return;
@@ -390,12 +416,12 @@ function _fmBuildPage(wrap) {
     _fmBuildFullYearChart();
   }, 60);
 
-  const el = document.getElementById('fm-last-updated');
-  if (el) el.textContent = 'آخر تحديث: ' + new Date().toLocaleTimeString('ar-SA');
+  _fmStartCountdown();
 }
 
 /* ── Refresh ── */
 function _fmRefresh() {
+  _fmStopTimer();
   _fmRendered = false;
   Object.values(FM_CHARTS).forEach(c => { try { c.destroy(); } catch (_) {} });
   Object.keys(FM_CHARTS).forEach(k => delete FM_CHARTS[k]);

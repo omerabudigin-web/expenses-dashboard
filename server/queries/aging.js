@@ -283,13 +283,14 @@ function computeSupplierFIFO(apMovements, arNetting, asOf) {
 async function getSupplierAgingData(dbName, asOfDate) {
   const pool = await getPool(dbName);
 
-  const [suppRes, catRes, apMovRes, linkRes] = await Promise.all([
+  const [suppRes, catRes, apMovRes, linkRes, custVatRes] = await Promise.all([
     pool.request().query(`
       SELECT s.Id AS SupplierId, s.NameAr AS SupplierName,
              ISNULL(s.Category, 0) AS CategoryId,
              ISNULL(cat.NameAr, '—') AS CategoryName,
              s.LimitDays AS CreditDays,
-             s.BalanceLimit AS CreditLimit
+             s.BalanceLimit AS CreditLimit,
+             ISNULL(s.VatNo, '') AS VatNo
       FROM dbo.Supplier s
       LEFT JOIN dbo.SupplierCategory cat ON cat.Id = s.Category
       ORDER BY s.Id
@@ -319,7 +320,13 @@ async function getSupplierAgingData(dbName, asOfDate) {
       LEFT JOIN dbo.Customer c ON c.Id  = csl.Customer
       LEFT JOIN dbo.Supplier s ON s.Id  = csl.Supplier
     `),
+    pool.request().query(
+      `SELECT DISTINCT VatNo FROM dbo.Customer WHERE NULLIF(VatNo, '') IS NOT NULL`
+    ),
   ]);
+
+  // VatNo-based related-party classification (same logic as CCC tab)
+  const relatedVatNos = new Set(custVatRes.recordset.map(r => (r.VatNo || '').toUpperCase()));
 
   // AR movements for each linked customer (to apply netting against AP)
   const arBalMap = new Map(); // supplierId → AR net balance of linked customer
@@ -350,10 +357,12 @@ async function getSupplierAgingData(dbName, asOfDate) {
   }
 
   // Build aged suppliers
-  const suppliers    = [];
+  const suppliers      = [];
+  const debitSuppliers = []; // raw debit balance (advance payments / overpayments)
   const nettingDetails = [];
-  const totalBuckets = { b1_7:0, b8_14:0, b15_30:0, b31_60:0, b61_90:0, b91_120:0, bOver120:0 };
-  let   totalBalance  = 0;
+  const totalBuckets   = { b1_7:0, b8_14:0, b15_30:0, b31_60:0, b61_90:0, b91_120:0, bOver120:0 };
+  let   totalBalance   = 0;
+  let   totalDebit     = 0;
 
   for (const s of suppRes.recordset) {
     const sid    = s.SupplierId;
@@ -363,6 +372,13 @@ async function getSupplierAgingData(dbName, asOfDate) {
     const isNetted  = arBalMap.has(sid);
     const arNetting = isNetted ? (arBalMap.get(sid) || 0) : 0;
     const rawAPBal  = apMovs.reduce((sum, m) => sum + (m[3]||0) - (m[2]||0), 0);
+    const isRelated = relatedVatNos.has((s.VatNo || '').toUpperCase());
+
+    // Track debit balances (suppliers we've overpaid — assets, not liabilities)
+    if (rawAPBal < -0.01) {
+      totalDebit += Math.abs(rawAPBal);
+      debitSuppliers.push({ name: s.SupplierName, balance: r2(rawAPBal) });
+    }
 
     if (isNetted) {
       nettingDetails.push({
@@ -395,6 +411,7 @@ async function getSupplierAgingData(dbName, asOfDate) {
       categoryName: s.CategoryName,
       creditDays:   s.CreditDays  || 0,
       creditLimit:  +s.CreditLimit || 0,
+      type:         isRelated ? 'related' : 'trade',
       balance:      r2(aged.balance),
       b1_7:         r2(aged.b1_7),
       b8_14:        r2(aged.b8_14),
@@ -415,19 +432,23 @@ async function getSupplierAgingData(dbName, asOfDate) {
   return {
     asOfDate,
     db: dbName,
-    categories:     catRes.recordset.map(c => ({ id: c.CatId, name: c.CatName })),
+    categories:      catRes.recordset.map(c => ({ id: c.CatId, name: c.CatName })),
     suppliers,
+    debitSuppliers,
     nettingDetails,
     totals: {
-      count:    suppliers.length,
-      balance:  r2(totalBalance),
-      b1_7:     r2(totalBuckets.b1_7),
-      b8_14:    r2(totalBuckets.b8_14),
-      b15_30:   r2(totalBuckets.b15_30),
-      b31_60:   r2(totalBuckets.b31_60),
-      b61_90:   r2(totalBuckets.b61_90),
-      b91_120:  r2(totalBuckets.b91_120),
-      bOver120: r2(totalBuckets.bOver120),
+      count:          suppliers.length,
+      balance:        r2(totalBalance),
+      b1_7:           r2(totalBuckets.b1_7),
+      b8_14:          r2(totalBuckets.b8_14),
+      b15_30:         r2(totalBuckets.b15_30),
+      b31_60:         r2(totalBuckets.b31_60),
+      b61_90:         r2(totalBuckets.b61_90),
+      b91_120:        r2(totalBuckets.b91_120),
+      bOver120:       r2(totalBuckets.bOver120),
+      debitTotal:     r2(totalDebit),
+      debitCount:     debitSuppliers.length,
+      nettingCount:   nettingDetails.filter(n => n.included).length,
     },
   };
 }

@@ -1,5 +1,31 @@
 ﻿// ── NOTES tab ─────────────────────────────────────────────────────────────────
 
+let _notesTimer     = null;
+let _notesCountdown = 0;
+const NOTES_REFRESH_SEC = 60;
+function _notesIsActive() { return !!document.querySelector('.tab.active[data-tab="notes"]'); }
+function _notesStopTimer() { if (_notesTimer) { clearInterval(_notesTimer); _notesTimer = null; } }
+function _notesStartCountdown(asOf, netProfit) {
+  _notesStopTimer();
+  _notesCountdown = NOTES_REFRESH_SEC;
+  const el = document.getElementById('notes-status');
+  const fmM = v => ((+v||0)/1e6).toFixed(2) + ' م';
+  const tick = () => {
+    if (!el) return;
+    const npTxt = netProfit != null ? ` | صافي ربح: ${fmM(netProfit)}` : '';
+    if (_notesCountdown > 0) {
+      el.textContent = `✅ كما في ${asOf}${npTxt} | ${new Date().toLocaleTimeString('ar-SA')} · تحديث بعد ${_notesCountdown}ث`;
+      el.style.color = '#1a7a3c';
+    }
+  };
+  tick();
+  _notesTimer = setInterval(() => {
+    if (!_notesIsActive()) { _notesStopTimer(); return; }
+    _notesCountdown = Math.max(0, _notesCountdown - 1);
+    tick();
+  }, 1000);
+}
+
 function buildNotesPeriodOptions() {
   const bs  = State.get('bs');
   const sel = document.getElementById('notes-period-sel');
@@ -430,6 +456,7 @@ function renderNotesTab() {
     </div>`;
 
   document.getElementById('notes-body').innerHTML = execHtml + notes.map(noteHtml).join('');
+  _notesStartCountdown(asOf, netProfitDisplay);
 }
 
 // ── NOTES export helpers ───────────────────────────────────────────────────────

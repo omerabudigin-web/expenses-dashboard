@@ -1,5 +1,31 @@
 ﻿// ── RATIOS tab ─────────────────────────────────────────────────────────────────
 
+let _ratTimer     = null;
+let _ratCountdown = 0;
+const RAT_REFRESH_SEC = 60;
+function _ratIsActive() { return !!document.querySelector('.tab.active[data-tab="ratios"]'); }
+function _ratStopTimer() { if (_ratTimer) { clearInterval(_ratTimer); _ratTimer = null; } }
+function _ratStartCountdown(asOf, currentRatio, netMargin) {
+  _ratStopTimer();
+  _ratCountdown = RAT_REFRESH_SEC;
+  const el = document.getElementById('ratios-status');
+  const tick = () => {
+    if (!el) return;
+    const crTxt = currentRatio != null && isFinite(currentRatio) ? ` | جاري: ${currentRatio.toFixed(2)}×` : '';
+    const nmTxt = netMargin   != null && isFinite(netMargin)    ? ` | هامش صافي: ${netMargin.toFixed(1)}%` : '';
+    if (_ratCountdown > 0) {
+      el.textContent = `✅ كما في ${asOf}${crTxt}${nmTxt} | ${new Date().toLocaleTimeString('ar-SA')} · تحديث بعد ${_ratCountdown}ث`;
+      el.style.color = '#1a7a3c';
+    }
+  };
+  tick();
+  _ratTimer = setInterval(() => {
+    if (!_ratIsActive()) { _ratStopTimer(); return; }
+    _ratCountdown = Math.max(0, _ratCountdown - 1);
+    tick();
+  }, 1000);
+}
+
 const RATIO_DEFS = [
   { key:'currentRatio',  lbl:'النسبة الجارية',          dec:2, sfx:'×',    lo:1,   hi:1.5, hb:true,  group:'💧 السيولة',       hint:'> 1.5 جيد · > 2 ممتاز' },
   { key:'quickRatio',    lbl:'النسبة السريعة',           dec:2, sfx:'×',    lo:0.7, hi:1,   hb:true,  group:'💧 السيولة',       hint:'> 1.0 جيد' },
@@ -249,6 +275,7 @@ function renderRatiosTab() {
   const allRatios = months.map(mo => computeRatios(bs, pl || [], mo, getRatiosPlFrom(mo, plMode))).filter(Boolean);
   renderRatiosTrend(allRatios);
   renderRatiosMonthlyTable(allRatios, asOf);
+  _ratStartCountdown(asOf, r.currentRatio, r.netMargin);
 }
 
 // ── Monthly comparison table ──────────────────────────────────────────────────

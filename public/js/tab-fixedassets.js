@@ -24,10 +24,51 @@ function faTypeOf(name) {
 const FA_FMT = n => (+n||0).toLocaleString('en-US', { minimumFractionDigits:2, maximumFractionDigits:2 });
 const FA_ESC = s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
-let _faData     = null;   // raw API rows
-let _faFilter   = 0;      // branch id, 0 = all
-let _faExpanded = new Set(); // expanded type keys
+let _faData     = null;
+let _faFilter   = 0;
+let _faExpanded = new Set();
 let _faSearch   = '';
+let _faAutoTimer = null;
+let _faCountdown = 0;
+let _faChart     = null;
+const FA_REFRESH_SEC = 60;
+
+function _faIsActive() {
+  return !!document.querySelector('.tab.active[data-tab="fixedassets"]');
+}
+function _faStopAuto() {
+  if (_faAutoTimer) { clearInterval(_faAutoTimer); _faAutoTimer = null; }
+}
+function _faStartAuto() {
+  _faStopAuto();
+  _faCountdown = FA_REFRESH_SEC;
+  _faAutoTimer = setInterval(async () => {
+    if (!_faIsActive()) { _faStopAuto(); return; }
+    _faCountdown--;
+    if (_faCountdown > 0) {
+      const el = document.getElementById('fa-status');
+      if (el && _faData) {
+        const cnt = [...new Set(_faData.map(r => r.id))].length;
+        el.textContent = `✅ ${cnt} أصل | ${new Date().toLocaleTimeString('ar-SA')} · تحديث بعد ${_faCountdown}ث`;
+        el.style.color = '#1a7a3c';
+      }
+    } else {
+      _faCountdown = FA_REFRESH_SEC;
+      _faSetStatus('🔄 جارٍ التحديث…', '#a87d00');
+      const db = State.get('db');
+      try {
+        const data = await fetch(`/api/fixed-assets?db=${encodeURIComponent(db)}`).then(r => r.json());
+        if (data.error) throw new Error(data.error);
+        _faData = data;
+        _faRender();
+        const cnt = [...new Set(data.map(r => r.id))].length;
+        _faSetStatus(`✅ ${cnt} أصل | ${new Date().toLocaleTimeString('ar-SA')} · تحديث بعد ${FA_REFRESH_SEC}ث`, '#1a7a3c');
+      } catch (err) {
+        _faSetStatus('⚠️ فشل التحديث: ' + err.message, '#c0392b');
+      }
+    }
+  }, 1000);
+}
 
 /* ── Entry point ── */
 async function renderFixedAssetsTab() {
@@ -44,7 +85,9 @@ async function renderFixedAssetsTab() {
     _faData = data;
     _faExpanded = new Set(FA_TYPES.map(t => t.key));  // expand all by default
     _faRender();
-    _faSetStatus(`✅ ${[...new Set(data.map(r=>r.id))].length} أصل | ${new Date().toLocaleTimeString('ar-SA')}`, '#1a7a3c');
+    const cnt = [...new Set(data.map(r => r.id))].length;
+    _faSetStatus(`✅ ${cnt} أصل | ${new Date().toLocaleTimeString('ar-SA')} · تحديث بعد ${FA_REFRESH_SEC}ث`, '#1a7a3c');
+    _faStartAuto();
   } catch (err) {
     _faSetStatus('❌ ' + err.message, '#c0392b');
     wrap.querySelector('#fa-body').innerHTML =
@@ -181,6 +224,9 @@ table.fa-tbl .branch-badge{
 </div>
 
 <div class="fa-kpis" id="fa-kpis"></div>
+<div id="fa-chart-wrap" style="display:none;padding:0 18px 4px;position:relative;height:200px">
+  <canvas id="chart-fixedassets"></canvas>
+</div>
 <div class="fa-body" id="fa-body"></div>
 `;
 
@@ -306,6 +352,9 @@ function _faRender() {
     <div class="fa-kpi green"><label>صافي القيمة الدفترية (ر.س)</label><div class="fa-val">${FA_FMT(totNet)}</div></div>
   `;
 
+  // Chart: grouped by type (only non-empty groups)
+  _faRenderChart(grouped);
+
   // Build groups HTML
   let html = '';
   FA_TYPES.forEach(t => {
@@ -378,6 +427,71 @@ function _faRender() {
       if (hdr) _faToggleGroup(hdr.dataset.fakey);
     });
   }
+}
+
+/* ── Chart: cost vs. depreciation by asset type ── */
+function _faRenderChart(grouped) {
+  const canvas = document.getElementById('chart-fixedassets');
+  const wrap   = document.getElementById('fa-chart-wrap');
+  if (!canvas || !wrap || typeof Chart === 'undefined') return;
+
+  // Only show types with assets
+  const active = FA_TYPES.filter(t => (grouped.get(t.key) || []).length > 0);
+  if (!active.length) { wrap.style.display = 'none'; return; }
+  wrap.style.display = 'block';
+
+  const labels  = active.map(t => t.label);
+  const netVals = active.map(t => (grouped.get(t.key) || []).reduce((s,a) => s + a.netBookValue, 0));
+  const deprVals = active.map(t => (grouped.get(t.key) || []).reduce((s,a) => s + (a.accumDepr || 0), 0));
+
+  if (_faChart) { _faChart.destroy(); _faChart = null; }
+
+  const fA = n => n >= 1e6 ? (n/1e6).toFixed(1)+'م' : n >= 1e3 ? (n/1e3).toFixed(0)+'ك' : n.toFixed(0);
+
+  _faChart = new Chart(canvas.getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'صافي القيمة الدفترية',
+          data: netVals,
+          backgroundColor: '#27ae60',
+          borderRadius: { topLeft:4, topRight:4, bottomLeft:0, bottomRight:0 },
+          borderWidth: 0,
+        },
+        {
+          label: 'الإهلاك المتراكم',
+          data: deprVals,
+          backgroundColor: '#c0392b55',
+          borderWidth: 0,
+        }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      indexAxis: 'y',
+      plugins: {
+        legend: {
+          display: true, position: 'top',
+          labels: { color: '#8a9bb5', font: { family:'Tajawal,sans-serif', size:11 }, boxWidth:12, padding:14 }
+        },
+        tooltip: { callbacks: { label: ctx => '  ' + FA_FMT(ctx.raw) + ' ر.س' } }
+      },
+      scales: {
+        x: {
+          stacked: false,
+          ticks: { color:'#5a7a9a', callback: v => fA(v) },
+          grid: { color:'#1a2d42' }
+        },
+        y: {
+          stacked: false,
+          ticks: { color:'#c8d8e0', font:{ family:'Tajawal,sans-serif', size:11 } },
+          grid: { display:false }
+        }
+      }
+    }
+  });
 }
 
 /* ── Toggle group ── */

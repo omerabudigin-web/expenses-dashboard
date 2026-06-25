@@ -1,5 +1,30 @@
 ﻿// ── BALANCE SHEET tab ─────────────────────────────────────────────────────────
 
+let _bsTimer     = null;
+let _bsCountdown = 0;
+const BS_REFRESH_SEC = 60;
+function _bsIsActive() { return !!document.querySelector('.tab.active[data-tab="bs"]'); }
+function _bsStopTimer() { if (_bsTimer) { clearInterval(_bsTimer); _bsTimer = null; } }
+function _bsStartCountdown(months, totalAssets, asOf) {
+  _bsStopTimer();
+  _bsCountdown = BS_REFRESH_SEC;
+  const el = document.getElementById('bs-status');
+  const fmM = v => ((+v||0)/1e6).toFixed(2) + ' م';
+  const tick = () => {
+    if (!el) return;
+    if (_bsCountdown > 0) {
+      el.textContent = `✅ ${months} شهر | كما في ${asOf} | أصول: ${fmM(totalAssets)} | ${new Date().toLocaleTimeString('ar-SA')} · تحديث بعد ${_bsCountdown}ث`;
+      el.style.color = '#1a7a3c';
+    }
+  };
+  tick();
+  _bsTimer = setInterval(() => {
+    if (!_bsIsActive()) { _bsStopTimer(); return; }
+    _bsCountdown = Math.max(0, _bsCountdown - 1);
+    tick();
+  }, 1000);
+}
+
 // Build monthly totals for chart + table.
 // retained = 30102 balance + cumulative net income (changes with P&L every month).
 // monthlyNI = change in retained month-over-month = that month's P&L net income.
@@ -248,6 +273,8 @@ function renderBS() {
 
   // Re-render formal statement if it's currently visible
   if (_bsfFormalMode) renderBSFormal();
+
+  _bsStartCountdown(months.length, totalA, label);
 }
 
 // ── BS Structure Analysis ─────────────────────────────────────────────────────

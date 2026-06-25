@@ -1,5 +1,31 @@
 ﻿// ── P&L tab ────────────────────────────────────────────────────────────────────
 
+let _plTimer     = null;
+let _plCountdown = 0;
+const PL_REFRESH_SEC = 60;
+function _plIsActive() { return !!document.querySelector('.tab.active[data-tab="pl"]'); }
+function _plStopTimer() { if (_plTimer) { clearInterval(_plTimer); _plTimer = null; } }
+function _plStartCountdown(months, revenue) {
+  _plStopTimer();
+  _plCountdown = PL_REFRESH_SEC;
+  const el = document.getElementById('pl-status');
+  const fmM = v => ((+v||0)/1e6).toFixed(2) + ' م';
+  const tick = () => {
+    if (!el) return;
+    const revTxt = revenue != null ? ` | إيرادات: ${fmM(revenue)}` : '';
+    if (_plCountdown > 0) {
+      el.textContent = `✅ ${months} شهر${revTxt} | ${new Date().toLocaleTimeString('ar-SA')} · تحديث بعد ${_plCountdown}ث`;
+      el.style.color = '#1a7a3c';
+    }
+  };
+  tick();
+  _plTimer = setInterval(() => {
+    if (!_plIsActive()) { _plStopTimer(); return; }
+    _plCountdown = Math.max(0, _plCountdown - 1);
+    tick();
+  }, 1000);
+}
+
 // Returns info about the last month if its OpEx looks suspiciously low
 // (< 60 % of the prior-months average) — signals an open / not-yet-closed month.
 function detectOpenMonth(plMonths) {
@@ -274,6 +300,7 @@ function renderPLTab() {
   renderPLTrend(plMonths);
   renderPLStatement(computed, priorComp);
   renderPLMonthlyTable(plMonths);
+  _plStartCountdown(plMonths.length, computed?.revenue);
 }
 
 // ── P&L exports ───────────────────────────────────────────────────────────────

@@ -67,8 +67,12 @@
   <div class="tab" data-tab="coils">الكويلات 🔩</div>
   <a href="/cash-sales.html?db=MekSoftDb1" class="tab tab-link">المبيعات النقدية — أبعاد 💵</a>
   <a href="/cash-sales.html?db=MekSoftDb2" class="tab tab-link">المبيعات النقدية — وسام 💵</a>
-  <div class="tab" data-tab="aging">إعمار الأرصدة 📋</div>
+  <div class="tab" data-tab="sales-inv">فواتير المبيعات 🧾</div>
+  <div class="tab" data-tab="aging">إعمار العملاء 📋</div>
+  <div class="tab" data-tab="ap-aging">أعمار الموردين 🏢</div>
   <div class="tab" data-tab="fixedassets">الأصول الثابتة 🏭</div>
+  <div class="tab" data-tab="ccc">دورة التحويل النقدي ⏱</div>
+  <div class="tab" data-tab="forecast">التدفق النقدي التنبؤي 📅</div>
   <a href="/budget.html"           class="tab tab-link tab-budget">الموازنة التقديرية 📈</a>
   <a href="/cashflow-budget.html" class="tab tab-link tab-cfbudget">الموازنة النقدية 💧</a>
 </div>
@@ -281,6 +285,7 @@
 </div>
 
 <div id="tab-pl" class="wrap hidden">
+  <div id="pl-status" style="font-size:.8rem;padding:6px 4px 10px;color:#3a6a4a;min-height:1.2em"></div>
   <div class="filters" style="margin-bottom:18px;flex-wrap:wrap;gap:8px">
     <label>الفترة:</label>
     <select id="pl-period-sel" class="sel"><option value="all">كل الفترة</option></select>
@@ -341,6 +346,7 @@
 </div>
 
 <div id="tab-bs" class="wrap hidden">
+  <div id="bs-status" style="font-size:.8rem;padding:6px 4px 10px;color:#3a6a4a;min-height:1.2em"></div>
   <div class="filters" style="margin-bottom:18px;flex-wrap:wrap;gap:8px">
     <label>كما في نهاية:</label>
     <select id="bs-period-sel"><option value="">آخر فترة</option></select>
@@ -430,6 +436,7 @@
 </div>
 
 <div id="tab-cf" class="wrap hidden">
+  <div id="cf-status" style="font-size:.8rem;padding:6px 4px 10px;color:#3a6a4a;min-height:1.2em"></div>
   <div class="filters" style="margin-bottom:18px">
     <label>الفترة:</label>
     <select id="cf-period-sel"><option value="all">كل الفترة</option></select>
@@ -478,6 +485,7 @@
 </div>
 
 <div id="tab-ratios" class="wrap hidden">
+  <div id="ratios-status" style="font-size:.8rem;padding:6px 4px 10px;color:#3a6a4a;min-height:1.2em"></div>
   <div class="filters" style="margin-bottom:18px;flex-wrap:wrap;gap:8px">
     <label>كما في نهاية:</label>
     <select id="ratios-period-sel" style="background:#0f2035;border:1px solid #1e3a5f;color:#c8d8e8;padding:6px 10px;border-radius:6px;font-size:.82rem"></select>
@@ -540,6 +548,7 @@
 </div>
 
 <div id="tab-notes" class="wrap hidden">
+  <div id="notes-status" style="font-size:.8rem;padding:6px 4px 10px;color:#3a6a4a;min-height:1.2em"></div>
   <div class="filters" style="margin-bottom:18px;flex-wrap:wrap;gap:8px">
     <label>كما في نهاية:</label>
     <select id="notes-period-sel" style="background:#0f2035;border:1px solid #1e3a5f;color:#c8d8e8;padding:6px 10px;border-radius:6px;font-size:.82rem"></select>
@@ -577,6 +586,7 @@
 
 <!-- ── CFO Executive Dashboard ─────────────────────────────────────────────── -->
 <div id="tab-cfo" class="wrap hidden">
+  <div id="cfo-status" style="font-size:.8rem;padding:6px 4px 10px;color:#3a6a4a;min-height:1.2em"></div>
   <div class="filters" style="margin-bottom:18px;flex-wrap:wrap;gap:8px">
     <label>الفترة:</label>
     <select id="cfo-quick-sel" class="sel">
@@ -620,6 +630,7 @@
 
 <!-- ── Consolidated (أبعاد + وسام) ───────────────────────────────────────── -->
 <div id="tab-consolidated" class="wrap hidden">
+  <div id="cons-status" style="font-size:.8rem;padding:6px 4px 10px;color:#3a6a4a;min-height:1.2em"></div>
   <div class="filters" style="margin-bottom:14px;align-items:center">
     <label>من:</label>
     <select id="cons-period-from" style="background:#0f2035;border:1px solid #1e3a5f;color:#c8d8e8;padding:6px 10px;border-radius:6px;font-size:.82rem"></select>
@@ -656,6 +667,7 @@
 </div>
 
 <div id="tab-cons-cf" class="wrap hidden">
+  <div id="cons-cf-status" style="font-size:.8rem;padding:6px 4px 10px;color:#3a6a4a;min-height:1.2em"></div>
   <div class="filters" style="margin-bottom:14px;align-items:center">
     <label>من:</label>
     <select id="cons-cf-from" style="background:#0f2035;border:1px solid #1e3a5f;color:#c8d8e8;padding:6px 10px;border-radius:6px;font-size:.82rem"></select>
@@ -705,6 +717,7 @@
 </div>
 
 <div id="tab-pl-comp" class="wrap hidden">
+  <div id="plc-status" style="font-size:.8rem;padding:6px 4px 10px;color:#3a6a4a;min-height:1.2em"></div>
   <!-- Filter bar -->
   <div class="filters" id="plc-filters">
     <label>الفترة:</label>
@@ -929,6 +942,11 @@
     <span id="is-count" style="font-size:.77rem;color:#5a7a9a;align-self:center"></span>
   </div>
 
+  <!-- Chart: top accounts summary -->
+  <div id="is-chart-wrap" style="display:none;position:relative;height:200px;margin-bottom:14px">
+    <canvas id="chart-is"></canvas>
+  </div>
+
   <!-- Breadcrumb (drill-down) -->
   <div id="is-breadcrumb" class="hidden" style="
     display:flex;align-items:center;gap:8px;margin-bottom:10px;
@@ -977,139 +995,20 @@
 
 </div>
 
-<!-- ── SAFETY INVENTORY TAB ────────────────────────────────────────────────── -->
-<div id="tab-safety" class="wrap hidden">
+<div id="tab-safety" class="wrap hidden"></div>
 
-  <div class="si-header">
-    <div>
-      <h3>تحليل عمر المخزون ومعدل الدوران — مستلزمات أنظمة السلامة</h3>
-      <div class="sub">ماسورة أسود عماني الجزيرة ضغط 40 · MekSoftDb1 · تحليل بتاريخ 2026-06-01 · الفترة المرجعية: 243 يوماً (أكتوبر 2025 – مايو 2026)</div>
-    </div>
-    <button class="btn" onclick="siExportExcel()" style="background:#0a3a1a;color:#80e0a0">📥 Excel</button>
-  </div>
+<div id="tab-sales-inv" class="wrap hidden"></div>
 
-  <!-- Alerts -->
-  <div class="si-alert crit">
-    <div class="si-alert-title">🚨 تنبيه عاجل — 6 بوصة: نفاد المخزون خلال 5 أيام تقريباً</div>
-    متبقٍ 41 حبة · معدل البيع الحالي 8.3 حبة/يوم · أعلى منتج إيراداً (25.3% من إجمالي المبيعات = 1.39 مليون ر.س) · <strong>أصدر طلب شراء فوري</strong>
-  </div>
-  <div class="si-alert warn">
-    <div class="si-alert-title">⚠️ تحذير — مخزون مفرط: رأس مال مجمّد 1.37 مليون ر.س</div>
-    ماسورة 1" (22 شهراً) + 1.25" (20 شهراً) + 3" (17 شهراً) تحتجز رأس مال ضخم. معدل الدوران السنوي المتوقع أقل من 0.6 دورة.
-  </div>
-  <div class="si-alert warn">
-    <div class="si-alert-title">⚠️ بضاعة راكدة — 0.5" و0.75": لا مبيعات منذ مارس 2026</div>
-    3,635 حبة بوصه 0.75 + 386 حبة بوصه 0.5 متوقفة عن الحركة منذ 64–67 يوماً. قيمة التكلفة المجمّدة: 102,918 ر.س.
-  </div>
-
-  <!-- KPIs -->
-  <div class="kpis" id="si-kpis"></div>
-
-  <!-- Traffic Light -->
-  <div class="card">
-    <div class="card-title">🚦 لوحة المخاطر التنفيذية — حالة كل صنف</div>
-    <div class="si-tl-grid" id="si-tl-grid"></div>
-    <div class="si-fn">🟢 سليم = DOH أقل من 90 يوماً | 🟡 مراقبة = 90–180 يوماً | 🔴 مفرط = 180+ يوماً | 🟣 راكد = لا مبيعات 30+ يوم | 🔴⚡ حرج = نفاد وشيك<br>DOH = أيام الإمداد بالسرعة الحالية (آخر 90 يوم).</div>
-  </div>
-
-  <!-- Charts row 1 -->
-  <div class="grid2">
-    <div class="card">
-      <div class="card-title">💰 قيمة المخزون المجمّد (ر.س) مقابل أيام الإمداد</div>
-      <div class="chart-wrap"><canvas id="si-chart-bubble"></canvas></div>
-    </div>
-    <div class="card">
-      <div class="card-title">🔄 معدل الدوران السنوي المتوقع (×/سنة)</div>
-      <div class="chart-wrap"><canvas id="si-chart-turnover"></canvas></div>
-    </div>
-  </div>
-
-  <!-- Heatmap -->
-  <div class="card">
-    <div class="card-title">🌡️ خريطة حرارة — المبيعات الشهرية بالحبة (أكتوبر 2025 – مايو 2026)</div>
-    <div class="tbl-wrap"><table id="si-heatmap"></table></div>
-    <div class="si-fn">اللون الأعمق = أعلى مبيعات · الخلايا الرمادية = صفر مبيعات</div>
-  </div>
-
-  <!-- Aging table -->
-  <div class="card">
-    <div class="card-title">⏳ تفصيل عمر المخزون ومعدل الدوران — تحليل FIFO</div>
-    <div class="tbl-wrap">
-      <table>
-        <thead><tr>
-          <th>الصنف</th><th class="num">المخزون (حبة)</th><th class="num">قيمة التكلفة (ر.س)</th>
-          <th>أقدم وحدة (FIFO)</th><th class="num">DOH (90 يوم)</th><th class="num">معدل الدوران</th>
-          <th class="num">DSI الكامل</th><th class="num">سرعة/يوم</th><th>توقع النفاد</th><th>الحالة</th>
-        </tr></thead>
-        <tbody id="si-tbody-aging"></tbody>
-        <tfoot id="si-tfoot-aging"></tfoot>
-      </table>
-    </div>
-    <div class="si-fn">FIFO = أقدم وحدة متبقية بحسب منطق أول داخل أول خارج. DOH = Days On Hand. DSI = Days Sales of Inventory. معدل الدوران = كمية مباعة ÷ متوسط المخزون خلال الفترة.</div>
-  </div>
-
-  <!-- Stockout projection -->
-  <div class="card">
-    <div class="card-title">📅 توقعات نفاد المخزون — بالسرعة الحالية (آخر 90 يوم)</div>
-    <div class="chart-wrap" style="height:240px;margin-bottom:16px"><canvas id="si-chart-stockout"></canvas></div>
-    <div class="tbl-wrap">
-      <table>
-        <thead><tr>
-          <th>الصنف</th><th class="num">المخزون</th><th class="num">معدل/يوم</th>
-          <th class="num">أيام للنفاد</th><th>تاريخ النفاد</th><th>آخر بيع</th><th class="num">هامش الأمان</th><th>قرار</th>
-        </tr></thead>
-        <tbody id="si-tbody-proj"></tbody>
-      </table>
-    </div>
-    <div class="si-fn">* مبني على متوسط 90 يوم. الهامش المقترح لإعادة الطلب: شهران من وقت الاستلام.</div>
-  </div>
-
-  <!-- Charts row 2 -->
-  <div class="grid2">
-    <div class="card">
-      <div class="card-title">📈 اتجاه مبيعات أكثر الأصناف نشاطاً (حبة/شهر)</div>
-      <div class="chart-wrap"><canvas id="si-chart-velocity"></canvas></div>
-    </div>
-    <div class="card">
-      <div class="card-title">🏷️ مقارنة هامش البيع ↔ الشراء (ر.س/حبة)</div>
-      <div class="chart-wrap"><canvas id="si-chart-margin"></canvas></div>
-    </div>
-  </div>
-
-  <!-- Recommendations -->
-  <div class="card">
-    <div class="card-title">💡 توصيات المحلل المالي</div>
-    <div class="si-rec-grid" id="si-rec-grid"></div>
-  </div>
-
-  <!-- Financial summary -->
-  <div class="card">
-    <div class="card-title">💵 ملخص المخاطر المالية والكفاءة</div>
-    <div class="tbl-wrap">
-      <table>
-        <thead><tr>
-          <th>الصنف</th><th class="num">قيمة الشراء (ر.س)</th><th class="num">إيرادات إجمالية (ر.س)</th>
-          <th class="num">مردودات (ر.س)</th><th class="num">صافي الإيرادات (ر.س)</th>
-          <th class="num">هامش الربح</th><th class="num">قيمة مخزون متبقٍ</th><th>نسبة التحصيل</th><th>رأس مال مجمّد</th>
-        </tr></thead>
-        <tbody id="si-tbody-fin"></tbody>
-        <tfoot id="si-tfoot-fin"></tfoot>
-      </table>
-    </div>
-    <div class="si-fn">صافي الإيرادات = الإيرادات الإجمالية (فواتير البيع) − مردودات البيع (SalesReturn). هامش الربح = (صافي الإيرادات − تكلفة مبيع) ÷ صافي الإيرادات. رأس المال المعطّل = قيمة مخزون الأصناف التي معدل دورانها أقل من مرتين سنوياً.</div>
-  </div>
-
-</div>
-
-<div id="tab-aging" class="wrap hidden"></div>
+<div id="tab-aging"    class="wrap hidden"></div>
+<div id="tab-ap-aging" class="wrap hidden"></div>
 <div id="tab-fixedassets" class="wrap hidden"></div>
 <div id="tab-stock" class="wrap hidden"></div>
 <div id="tab-finmodel" class="wrap hidden"></div>
 <div id="tab-inventory" class="wrap hidden"></div>
 <div id="tab-manufacturing" class="wrap hidden"></div>
-<div id="tab-coils" class="hidden" style="height:calc(100vh - 110px)">
-  <iframe id="coils-iframe" src="" style="width:100%;height:100%;border:none;display:block;background:#0d1117"></iframe>
-</div>
+<div id="tab-coils" class="wrap hidden"></div>
+<div id="tab-ccc" class="wrap hidden"></div>
+<div id="tab-forecast" class="wrap hidden"></div>
 
 <script src="/js/constants.js"></script>
 <script src="/js/state.js"></script>
@@ -1136,12 +1035,17 @@
 <script src="/js/tab-pl-comp.js"></script>
 <script src="/js/tab-verify.js"></script>
 <script src="/js/tab-safety.js"></script>
+<script src="/js/tab-sales-invoices.js"></script>
 <script src="/js/tab-aging.js"></script>
+<script src="/js/tab-ap-aging.js"></script>
 <script src="/js/tab-finmodel.js"></script>
 <script src="/js/tab-inventory.js"></script>
 <script src="/js/tab-manufacturing.js"></script>
 <script src="/js/tab-fixedassets.js"></script>
 <script src="/js/tab-stock.js"></script>
+<script src="/js/tab-coils.js"></script>
+<script src="/js/tab-ccc.js"></script>
+<script src="/js/tab-forecast.js"></script>
 <script src="/js/main.js"></script>
 </body>
 </html>

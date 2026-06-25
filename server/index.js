@@ -18,9 +18,16 @@ const { getIncomeStatement, getIncomeStatementTree }           = require('./quer
 const { getCashSales }                                         = require('./queries/cash-sales');
 const { getBudget }                                            = require('./queries/budget');
 const { getCashFlowBudget }                                    = require('./queries/cashflow');
-const { getAgingData }                                         = require('./queries/aging');
+const { getAgingData, getSupplierAgingData }                   = require('./queries/aging');
 const { getFixedAssets }                                       = require('./queries/fixed-assets');
 const { getStockData }                                         = require('./queries/stock');
+const { getSafetyData }                                        = require('./queries/safety');
+const { getCoilsData }                                         = require('./queries/coils');
+const { getMfgData }                                           = require('./queries/manufacturing');
+const { getInventoryData }                                     = require('./queries/inventory');
+const { getSalesInvoices }                                     = require('./queries/sales-invoices');
+const { getCCCData }                                           = require('./queries/ccc');
+const { getForecastData }                                      = require('./queries/forecast');
 
 const app        = express();
 const PORT       = parseInt(process.env.PORT, 10)             || 3001;
@@ -620,6 +627,21 @@ app.get('/api/aging', async (req, res) => {
   }
 });
 
+// ── GET /api/ap-aging?db=&asOf=YYYY-MM-DD — إعمار أرصدة الموردين ──────────────
+app.get('/api/ap-aging', async (req, res) => {
+  const dbName = resolveDb(req.query);
+  const asOf   = /^\d{4}-\d{2}-\d{2}$/.test(req.query.asOf || '')
+    ? req.query.asOf
+    : new Date().toISOString().slice(0, 10);
+  try {
+    const data = await getSupplierAgingData(dbName, asOf);
+    res.json(data);
+  } catch (err) {
+    console.error('[api/ap-aging]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── GET /api/fixed-assets?db= ─────────────────────────────────────────────────
 app.get('/api/fixed-assets', async (req, res) => {
   const dbName = resolveDb(req.query);
@@ -629,6 +651,54 @@ app.get('/api/fixed-assets', async (req, res) => {
   } catch (err) {
     console.error('[api/fixed-assets]', err.message);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /api/manufacturing?db= ───────────────────────────────────────────────
+app.get('/api/manufacturing', async (req, res) => {
+  const dbName = resolveDb(req.query);
+  try {
+    const data = await getMfgData(dbName);
+    res.json(data);
+  } catch (err) {
+    console.error('[api/manufacturing]', err.message);
+    res.status(500).json({ error: 'query failed', message: err.message });
+  }
+});
+
+// ── GET /api/inventory?db= ───────────────────────────────────────────────────
+app.get('/api/inventory', async (req, res) => {
+  const dbName = resolveDb(req.query);
+  try {
+    const data = await getInventoryData(dbName);
+    res.json(data);
+  } catch (err) {
+    console.error('[api/inventory]', err.message);
+    res.status(500).json({ error: 'query failed', message: err.message });
+  }
+});
+
+// ── GET /api/coils?db= ────────────────────────────────────────────────────────
+app.get('/api/coils', async (req, res) => {
+  const dbName = resolveDb(req.query);
+  try {
+    const data = await getCoilsData(dbName);
+    res.json(data);
+  } catch (err) {
+    console.error('[api/coils]', err.message);
+    res.status(500).json({ error: 'query failed', message: err.message });
+  }
+});
+
+// ── GET /api/safety?db= ───────────────────────────────────────────────────────
+app.get('/api/safety', async (req, res) => {
+  const dbName = resolveDb(req.query);
+  try {
+    const data = await getSafetyData(dbName);
+    res.json(data);
+  } catch (err) {
+    console.error('[api/safety]', err.message);
+    res.status(500).json({ error: 'query failed', message: err.message });
   }
 });
 
@@ -658,6 +728,57 @@ app.get('/api/cashflow', async (req, res) => {
   } catch (err) {
     console.error('[api/cashflow]', err.message);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /api/sales-invoices?db=&from=&to= ─────────────────────────────────────
+app.get('/api/sales-invoices', async (req, res) => {
+  const dbName = resolveDb(req.query);
+  const from   = req.query.from || new Date().toISOString().slice(0, 10);
+  const to     = req.query.to   || from;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to))
+    return res.status(400).json({ error: 'from and to must be YYYY-MM-DD' });
+  try {
+    const data = await getSalesInvoices(dbName, { from, to });
+    res.json(data);
+  } catch (err) {
+    console.error('[api/sales-invoices]', err.message);
+    res.status(500).json({ error: 'query failed', message: err.message });
+  }
+});
+
+// ── GET /api/ccc?from=YYYY-MM-DD&to=YYYY-MM-DD ────────────────────────────────
+app.get('/api/ccc', async (req, res) => {
+  const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+  const from = req.query.from || START_DATE;
+  const to   = req.query.to   || new Date().toISOString().slice(0, 10);
+  if (!DATE_RE.test(from) || !DATE_RE.test(to))
+    return res.status(400).json({ error: 'from and to must be YYYY-MM-DD' });
+  if (DB_NAMES.length < 2)
+    return res.status(400).json({ error: 'need at least 2 databases configured (DB1_NAME, DB2_NAME)' });
+  try {
+    const data = await getCCCData(DB_NAMES[0], DB_NAMES[1], from, to);
+    res.json(data);
+  } catch (err) {
+    console.error('[api/ccc]', err.message);
+    res.status(500).json({ error: 'query failed', message: err.message });
+  }
+});
+
+// ── GET /api/forecast?db=&from=&to= ───────────────────────────────────────────
+app.get('/api/forecast', async (req, res) => {
+  const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+  const db   = resolveDb(req.query);
+  const from = req.query.from || START_DATE;
+  const to   = req.query.to   || new Date().toISOString().slice(0, 10);
+  if (!DATE_RE.test(from) || !DATE_RE.test(to))
+    return res.status(400).json({ error: 'from and to must be YYYY-MM-DD' });
+  try {
+    const data = await getForecastData(db, from, to);
+    res.json(data);
+  } catch (err) {
+    console.error('[api/forecast]', err.message);
+    res.status(500).json({ error: 'query failed', message: err.message });
   }
 });
 

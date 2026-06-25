@@ -5,7 +5,13 @@ let _agDb        = 'MekSoftDb1';
 let _agData      = null;
 let _agTimer     = null;
 let _agRendered  = false;
-let _agView      = 'flat';  // 'flat' | 'grouped'
+let _agView      = 'flat';
+let _agCountdown = 0;
+let _agChart     = null;
+const AG_REFRESH_SEC = 60;
+
+function _agIsActive() { return !!document.querySelector('.tab.active[data-tab="aging"]'); }
+function _agStopTimer() { if (_agTimer) { clearInterval(_agTimer); _agTimer = null; } }
 
 const AG_FMT  = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const agFmt   = v => AG_FMT.format(+v || 0);
@@ -56,10 +62,16 @@ function _agBuildShell() {
     <input  id="ag-search" type="text"   class="ag-inp" placeholder="🔍 اسم / رقم…" style="min-width:150px">
     <label  class="ag-chk"><input type="checkbox" id="ag-zero"> صفري</label>
     <button id="ag-refresh" class="ag-btn ag-btn-blue">↺ تحديث</button>
+    <button id="ag-btn-excel" class="ag-btn ag-btn-excel">📊 Excel</button>
     <div style="margin-right:auto;display:flex;gap:6px">
       <button id="ag-btn-flat"    class="ag-view-btn active">مسطّح</button>
       <button id="ag-btn-grouped" class="ag-view-btn">حسب البائع</button>
     </div>
+  </div>
+
+  <!-- رسم بياني توزيع الإعمار -->
+  <div id="ag-chart-wrap" class="ag-chart-wrap" style="display:none">
+    <canvas id="chart-aging"></canvas>
   </div>
 
   <!-- بطاقات البائعين -->
@@ -107,6 +119,14 @@ function _agWireControls(wrap) {
   // View toggle
   document.getElementById('ag-btn-flat')?.addEventListener('click',    () => _agSetView('flat'));
   document.getElementById('ag-btn-grouped')?.addEventListener('click', () => _agSetView('grouped'));
+
+  // Excel
+  document.getElementById('ag-btn-excel')?.addEventListener('click', () => {
+    const btn = document.getElementById('ag-btn-excel');
+    btn.disabled = true; btn.textContent = '⏳…';
+    agExportExcel().catch(e => { console.error(e); alert('خطأ في التصدير'); })
+      .finally(() => { btn.disabled = false; btn.textContent = '📊 Excel'; });
+  });
 }
 
 /* ── Fetch & render ── */
@@ -188,6 +208,7 @@ function _agRender(data) {
   const custs   = _agFiltered(data);
   const selMap  = new Map((data.sellers || []).map(s => [s.id, s.name]));
 
+  _agRenderChart(custs);
   _agRenderCards(custs, selMap);
   _agRenderNetBar(data);
   _agRenderTable(custs, selMap);
@@ -441,14 +462,225 @@ function _agRenderTally(custs) {
   }
 }
 
-/* ── Auto-refresh timer ── */
+/* ── Auto-refresh timer with countdown ── */
 function _agStartTimer() {
-  if (_agTimer) clearInterval(_agTimer);
+  _agStopTimer();
+  _agCountdown = AG_REFRESH_SEC;
   _agTimer = setInterval(() => {
-    // فقط إذا كان التاب نشطاً
-    const tabEl = document.getElementById('tab-aging');
-    if (tabEl && !tabEl.classList.contains('hidden')) _agLoad();
-  }, 60000);
+    if (!_agIsActive()) { _agStopTimer(); return; }
+    _agCountdown--;
+    if (_agCountdown > 0) {
+      const el = document.getElementById('ag-status');
+      if (el && _agData) {
+        const custs = _agFiltered(_agData);
+        const tot   = custs.reduce((s, c) => s + c.balance, 0);
+        const asof  = document.getElementById('ag-asof')?.value || _agData.asOfDate;
+        el.textContent = `✅ ${custs.length} عميل | ${agFmt(tot)} ر.س | حتى ${asof} | تحديث بعد ${_agCountdown}ث`;
+        el.style.color = '#1a7a3c';
+      }
+    } else {
+      _agCountdown = AG_REFRESH_SEC;
+      _agLoad();
+    }
+  }, 1000);
+}
+
+/* ── Aging distribution chart ── */
+function _agRenderChart(custs) {
+  const canvas = document.getElementById('chart-aging');
+  const wrap   = document.getElementById('ag-chart-wrap');
+  if (!canvas || !wrap) return;
+  if (!custs.length) { wrap.style.display = 'none'; return; }
+  wrap.style.display = 'block';
+  if (_agChart) { _agChart.destroy(); _agChart = null; }
+
+  const labels  = ['1–7 يوم', '8–14 يوم', '15–30 يوم', '31–60 يوم', '61–90 يوم', '91–120 يوم', '+120 يوم'];
+  const totals  = [
+    custs.reduce((s, c) => s + (c.b1_7    || 0), 0),
+    custs.reduce((s, c) => s + (c.b8_14   || 0), 0),
+    custs.reduce((s, c) => s + (c.b15_30  || 0), 0),
+    custs.reduce((s, c) => s + (c.b31_60  || 0), 0),
+    custs.reduce((s, c) => s + (c.b61_90  || 0), 0),
+    custs.reduce((s, c) => s + (c.b91_120 || 0), 0),
+    custs.reduce((s, c) => s + (c.bOver120|| 0), 0),
+  ];
+  const colors = ['#4a9eda', '#34d399', '#6ab0d0', '#f5a623', '#e07040', '#da5535', '#da3a3a'];
+
+  _agChart = new Chart(canvas.getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{ data: totals, backgroundColor: colors, borderRadius: 4, borderWidth: 0 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => '  ' + agFmt(ctx.raw) + ' ر.س' } }
+      },
+      scales: {
+        x: { ticks: { color: '#7090b0', font: { family: 'Tajawal,sans-serif', size: 11 } }, grid: { color: '#0f2035' } },
+        y: { ticks: { color: '#5a7a9a', callback: v => v >= 1e6 ? (v/1e6).toFixed(1)+'م' : v >= 1e3 ? (v/1e3).toFixed(0)+'ك' : v }, grid: { color: '#0f2035' } }
+      }
+    }
+  });
+}
+
+/* ── Excel export ── */
+async function agExportExcel() {
+  if (!_agData) return;
+  if (typeof ExcelJS === 'undefined') { alert('مكتبة ExcelJS لم تُحمَّل بعد، جرّب تحديث الصفحة'); return; }
+
+  const custs  = _agFiltered(_agData);
+  const selMap = new Map((_agData.sellers || []).map(s => [s.id, s.name]));
+  const asof   = document.getElementById('ag-asof')?.value || _agData.asOfDate;
+  const dbLbl  = _agDb === 'MekSoftDb1' ? 'أبعاد الحديد' : 'وسام الفولاذ';
+  const genDate = new Date().toLocaleDateString('ar-SA', { year:'numeric', month:'long', day:'numeric' });
+
+  const FONT = 'Calibri';
+  const numFmt = '#,##0.00;#,##0.00;"-"';
+  const CLR = {
+    navy: 'FF0D1F3C', gold: 'FFC9A84C', blue: 'FF1e3a5f',
+    white: 'FFFFFFFF', hdr: 'FF0a1828', textLight: 'FFa0b8d0',
+    warn: 'FF1a1400', danger: 'FF1a0808',
+  };
+  const solid = a => ({ type:'pattern', pattern:'solid', fgColor:{ argb:a } });
+
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'MekSoft ERP Dashboard'; wb.created = new Date();
+
+  // ── Sheet 1: Summary by bucket ──────────────────────────────────────────────
+  const ws1 = wb.addWorksheet('ملخص الإعمار', { views:[{ rightToLeft:true }] });
+  ws1.columns = [{ width:22 },{ width:16 },{ width:16 },{ width:16 },{ width:16 },{ width:16 },{ width:16 },{ width:16 },{ width:16 }];
+
+  const addHdr1 = (text, sz, fg, bg, span) => {
+    const r = ws1.addRow([text]); r.height = sz > 12 ? 30 : 22;
+    ws1.mergeCells(r.number, 1, r.number, 9);
+    const c = r.getCell(1);
+    c.font = { name:FONT, size:sz, bold:true, color:{ argb:fg } };
+    c.fill = solid(bg); c.alignment = { horizontal:'center', vertical:'middle' };
+  };
+
+  addHdr1(dbLbl, 13, CLR.gold, CLR.navy);
+  addHdr1('إعمار الأرصدة — توزيع بالفترة', 11, CLR.white, 'FF152d56');
+  addHdr1(`حتى تاريخ: ${asof}   |   أُنشئ: ${genDate}`, 9, CLR.textLight, CLR.navy);
+  ws1.addRow([]);
+
+  // Bucket totals
+  const bucketKeys = ['b1_7','b8_14','b15_30','b31_60','b61_90','b91_120','bOver120'];
+  const bucketLbls = ['1–7 يوم','8–14 يوم','15–30 يوم','31–60 يوم','61–90 يوم','91–120 يوم','+120 يوم'];
+  const totRow = ws1.addRow(['الفئة', ...bucketLbls, 'الإجمالي']);
+  totRow.eachCell((c, ci) => {
+    c.font = { name:FONT, size:10, bold:true, color:{ argb:CLR.white } };
+    c.fill = solid(CLR.hdr);
+    c.alignment = { horizontal: ci === 1 ? 'right' : 'center', vertical:'middle' };
+  });
+  totRow.height = 20;
+
+  // Totals row
+  const tots = bucketKeys.map(k => custs.reduce((s,c) => s+(c[k]||0), 0));
+  const grandTot = custs.reduce((s,c) => s+c.balance, 0);
+  const dRow = ws1.addRow(['إجمالي الذمم', ...tots, grandTot]);
+  dRow.height = 18;
+  dRow.eachCell((c, ci) => {
+    c.font = { name:FONT, size:10, bold:true, color:{ argb:ci===1?CLR.gold:'FF5baef0' } };
+    c.fill = solid('FF0a1e30');
+    if (ci > 1) { c.numFmt = numFmt; c.alignment = { horizontal:'left' }; }
+    else c.alignment = { horizontal:'right' };
+  });
+
+  // Per seller
+  const groups = new Map();
+  custs.forEach(c => {
+    const sid = c.sellerId || 0;
+    if (!groups.has(sid)) groups.set(sid, []);
+    groups.get(sid).push(c);
+  });
+  for (const [sid, sc] of [...groups.entries()].sort((a,b) => b[1].reduce((s,c)=>s+c.balance,0)-a[1].reduce((s,c)=>s+c.balance,0))) {
+    const sName = selMap.get(sid) || (sid===0?'بلا بائع':`بائع ${sid}`);
+    const stots = bucketKeys.map(k => sc.reduce((s,c) => s+(c[k]||0), 0));
+    const stot  = sc.reduce((s,c) => s+c.balance, 0);
+    const sr = ws1.addRow([sName, ...stots, stot]);
+    sr.height = 16;
+    sr.eachCell((c, ci) => {
+      c.font  = { name:FONT, size:9.5, color:{ argb: ci===1?'FFc8d8e8':'FFa0b8d0' } };
+      c.fill  = solid('FF0d1b2a');
+      c.border = { bottom: { style:'hair', color:{ argb:CLR.blue } } };
+      if (ci > 1) { c.numFmt = numFmt; c.alignment = { horizontal:'left' }; }
+      else c.alignment = { horizontal:'right' };
+    });
+  }
+
+  // ── Sheet 2: Detailed list ───────────────────────────────────────────────────
+  const ws2 = wb.addWorksheet('تفاصيل العملاء', { views:[{ rightToLeft:true }] });
+  ws2.columns = [
+    {width:14},{width:35},{width:20},{width:12},{width:14},
+    {width:14},{width:14},{width:14},{width:14},{width:14},{width:14},{width:14},{width:14}
+  ];
+
+  const addHdr2 = (text, sz, fg, bg) => {
+    const r = ws2.addRow([text]); r.height = sz > 12 ? 30 : 22;
+    ws2.mergeCells(r.number, 1, r.number, 13);
+    const c = r.getCell(1);
+    c.font = { name:FONT, size:sz, bold:true, color:{ argb:fg } };
+    c.fill = solid(bg); c.alignment = { horizontal:'center', vertical:'middle' };
+  };
+  addHdr2(dbLbl, 13, CLR.gold, CLR.navy);
+  addHdr2('إعمار الأرصدة — تفاصيل', 11, CLR.white, 'FF152d56');
+  addHdr2(`حتى: ${asof}   |   ${custs.length} عميل   |   ${genDate}`, 9, CLR.textLight, CLR.navy);
+  ws2.addRow([]);
+
+  const colHdr = ws2.addRow(['الكود','اسم العميل','البائع','أيام التأجيل','الرصيد','1–7','8–14','15–30','31–60','61–90','91–120','+120','الإجمالي']);
+  colHdr.height = 20;
+  colHdr.eachCell(c => {
+    c.font = { name:FONT, size:9.5, bold:true, color:{ argb:CLR.white } };
+    c.fill = solid(CLR.hdr);
+    c.alignment = { horizontal:'center', vertical:'middle' };
+  });
+
+  custs.forEach(c => {
+    const sName = selMap.get(c.sellerId) || (c.sellerId===0?'بلا بائع':'—');
+    const r = ws2.addRow([
+      c.code, c.name, sName, c.creditDays||0, c.balance,
+      c.b1_7||0, c.b8_14||0, c.b15_30||0, c.b31_60||0, c.b61_90||0, c.b91_120||0, c.bOver120||0,
+      c.balance
+    ]);
+    r.height = 15;
+    const isRisk = c.bOver120 > 0;
+    const isWarn = !isRisk && (c.b31_60+c.b61_90+c.b91_120) > 0;
+    const bg = isRisk ? CLR.danger : isWarn ? CLR.warn : 'FF0d1b2a';
+    r.eachCell((cell, ci) => {
+      cell.fill = solid(bg);
+      cell.font = { name:FONT, size:9, color:{ argb:'FFb0c8e0' } };
+      cell.border = { bottom:{ style:'hair', color:{ argb:CLR.blue } } };
+      if (ci >= 5) { cell.numFmt = numFmt; cell.alignment = { horizontal:'left' }; }
+      else cell.alignment = { horizontal: ci===1 ? 'left' : 'right' };
+    });
+    r.getCell(2).font = { name:FONT, size:9, bold:true, color:{ argb:'FFc8d8e8' } };
+    r.getCell(5).font = { name:FONT, size:9, bold:true, color:{ argb:'FF5baef0' } };
+  });
+
+  // Grand total row
+  const gt = ws2.addRow([
+    '', `الإجمالي — ${custs.length} عميل`, '', '',
+    custs.reduce((s,c)=>s+c.balance,0),
+    ...bucketKeys.map(k => custs.reduce((s,c)=>s+(c[k]||0),0)),
+    custs.reduce((s,c)=>s+c.balance,0)
+  ]);
+  gt.height = 20;
+  gt.eachCell((c, ci) => {
+    c.fill  = solid(CLR.navy);
+    c.font  = { name:FONT, size:10, bold:true, color:{ argb: ci>=5?'FF5baef0':CLR.gold } };
+    c.border = { top:{ style:'double', color:{ argb:CLR.gold } } };
+    if (ci >= 5) { c.numFmt = numFmt; c.alignment = { horizontal:'left' }; }
+  });
+
+  const buf = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buf], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = `إعمار_الأرصدة_${_agDb}_${asof}.xlsx`; a.click();
+  URL.revokeObjectURL(url);
 }
 
 /* ── CSS ── */
@@ -475,6 +707,7 @@ function _injectAgingCSS() {
     .ag-btn{padding:4px 12px;border-radius:5px;border:none;font-family:inherit;
       font-size:.8rem;font-weight:600;cursor:pointer;white-space:nowrap}
     .ag-btn-blue{background:#2B388F;color:#fff}.ag-btn-blue:hover{background:#1f2d72}
+    .ag-btn-excel{background:#0a3a1a;color:#80e0a0;border:1px solid #1a5a2a}.ag-btn-excel:hover{background:#0d4a20}
     .ag-db-group{display:flex;gap:2px}
     .ag-db-btn{padding:4px 13px;border-radius:5px;border:1px solid #1e3a5f;
       background:#0a1828;color:#7090b0;font-family:inherit;font-size:.8rem;
@@ -484,6 +717,10 @@ function _injectAgingCSS() {
     .ag-view-btn{padding:3px 11px;border-radius:4px;border:1px solid #1e3a5f;
       background:#0a1828;color:#7090b0;font-family:inherit;font-size:.78rem;cursor:pointer}
     .ag-view-btn.active{background:#1e3a5f;color:#c8d8e8}
+
+    /* Chart */
+    .ag-chart-wrap{background:#0d1b2a;border-bottom:1px solid #1e3a5f;
+      padding:12px 16px;position:relative;height:170px}
 
     /* Cards */
     .ag-cards-wrap{display:flex;gap:10px;padding:10px 16px;flex-wrap:wrap;background:#0d1b2a;

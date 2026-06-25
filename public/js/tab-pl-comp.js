@@ -3,6 +3,36 @@ let _plCompCache  = {};
 let _plCompChart  = null;
 let _plCompInited = false;
 
+let _plcTimer     = null;
+let _plcCountdown = 0;
+const PLC_REFRESH_SEC = 60;
+function _plcIsActive() { return !!document.querySelector('.tab.active[data-tab="pl-comp"]'); }
+function _plcStopTimer() { if (_plcTimer) { clearInterval(_plcTimer); _plcTimer = null; } }
+function _plcStartCountdown(periodLabel, revenue) {
+  _plcStopTimer();
+  _plcCountdown = PLC_REFRESH_SEC;
+  const el = document.getElementById('plc-status');
+  const fmM = v => ((+v||0)/1e6).toFixed(2) + ' م';
+  const tick = () => {
+    if (!el) return;
+    const revTxt = revenue != null ? ` | إيرادات: ${fmM(revenue)}` : '';
+    if (_plcCountdown > 0) {
+      el.textContent = `✅ ${periodLabel}${revTxt} | ${new Date().toLocaleTimeString('ar-SA')} · تحديث بعد ${_plcCountdown}ث`;
+      el.style.color = '#1a7a3c';
+    } else {
+      el.textContent = `⏳ جارٍ إعادة التحميل...`;
+      el.style.color = '#8a7a3c';
+    }
+  };
+  tick();
+  _plcTimer = setInterval(() => {
+    if (!_plcIsActive()) { _plcStopTimer(); return; }
+    _plcCountdown = Math.max(0, _plcCountdown - 1);
+    tick();
+    if (_plcCountdown === 0) { _plcStopTimer(); renderPLComparison(); }
+  }, 1000);
+}
+
 const PLCOMP_OPENING = {
   MekSoftDb1: { month: '2025-09', inv_balance: 4061406.11, ei_periodic: 3637611.23 },
   MekSoftDb2: { month: '2025-08', inv_balance: 0,          ei_periodic: 0           },
@@ -829,4 +859,6 @@ async function renderPLComparison() {
     const saved = localStorage.getItem('plc-notes-' + period.label);
     notesEl.value = saved != null ? saved : '';
   }
+
+  _plcStartCountdown(period.label, a?.net_revenue);
 }

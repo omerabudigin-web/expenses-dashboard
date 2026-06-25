@@ -1,10 +1,34 @@
-﻿// ── Tab dispatcher ────────────────────────────────────────────────────────────
-// ── TRIAL BALANCE tab ─────────────────────────────────────────────────────────
+﻿// ── TRIAL BALANCE tab ─────────────────────────────────────────────────────────
 
-let _tbData       = null;   // last fetched rows (flat list, every account w/ activity, carries id/parentID)
-let _tbCmpData    = null;   // comparison period (same months, previous year)
+let _tbData       = null;
+let _tbCmpData    = null;
 let _tbInited     = false;
-let _tbExpanded   = new Set();  // ids of expanded tree nodes
+let _tbExpanded   = new Set();
+let _tbAutoTimer  = null;
+let _tbCountdown  = 0;
+let _tbChartInst  = null;
+const TB_REFRESH_SEC = 60;
+
+function _tbIsActive() { return !!document.querySelector('.tab.active[data-tab="trial"]'); }
+function _tbStopAuto()  { if (_tbAutoTimer) { clearInterval(_tbAutoTimer); _tbAutoTimer = null; } }
+function _tbStartAuto() {
+  _tbStopAuto();
+  _tbCountdown = TB_REFRESH_SEC;
+  _tbAutoTimer = setInterval(() => {
+    if (!_tbIsActive()) { _tbStopAuto(); return; }
+    _tbCountdown--;
+    const el = document.getElementById('tb-status');
+    if (_tbCountdown > 0) {
+      if (el && _tbData) {
+        el.textContent = `✅ ${_tbData.length} حساب | ${new Date().toLocaleTimeString('ar-SA')} · تحديث بعد ${_tbCountdown}ث`;
+        el.style.color = '#1a7a3c';
+      }
+    } else {
+      _tbCountdown = TB_REFRESH_SEC;
+      fetchTrialBalance();
+    }
+  }, 1000);
+}
 
 function _tbLastDay(ym) {
   const [y, m] = ym.split('-').map(Number);
@@ -183,6 +207,8 @@ async function fetchTrialBalance() {
     _tbExpanded = _tbDefaultExpand(_tbData);
     statusEl.textContent = cmpRows ? `${resp.length} حساب + مقارنة` : '';
     _renderTBRows();
+    _tbRenderKPIs();
+    _tbStartAuto();
   } catch (e) {
     _tbData = null;
     const C = document.getElementById('tb-compare')?.checked ? 11 : 8;
@@ -197,7 +223,14 @@ async function fetchTrialBalance() {
 function renderTrialBalance() {
   initTrialBalance();
   _tbPopulateBranches();
-  if (_tbData) _renderTBRows();
+  _tbInjectKPIArea();
+  if (_tbData) {
+    _renderTBRows();
+    _tbRenderKPIs();
+    _tbStartAuto();
+  } else {
+    fetchTrialBalance();
+  }
 }
 
 function _renderTBRows() {
@@ -406,6 +439,114 @@ function _renderTBRows() {
 
   document.getElementById('tb-count').textContent =
     `${matchCount.toLocaleString('ar-SA')} حساب${search ? ` (من أصل ${_tbData.length.toLocaleString('ar-SA')})` : ''}`;
+}
+
+// ── KPI cards + chart ────────────────────────────────────────────────────────
+
+function _tbInjectCSS() {
+  if (document.getElementById('tb-kpi-css')) return;
+  const s = document.createElement('style'); s.id = 'tb-kpi-css';
+  s.textContent = `
+    #tb-kpi-wrap { padding: 0 0 4px 0; }
+    .tb-kpi-row  { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:10px; }
+    .tb-kpi-card { background:#0a1828; border:1px solid #1e3a5f; border-radius:8px;
+      padding:12px 16px; min-width:155px; flex:1; font-family:Tajawal,sans-serif; }
+    .tb-kpi-lbl  { font-size:.72rem; color:#5a80a0; }
+    .tb-kpi-val  { font-size:1.2rem; font-weight:700; color:#c8e8ff; margin-top:3px; }
+    .tb-kpi-sub  { font-size:.68rem; color:#3a6080; margin-top:2px; }
+    #tb-chart-wrap { background:#0a1828; border:1px solid #1e3a5f; border-radius:8px;
+      padding:14px 16px; margin-bottom:10px; position:relative; height:160px; }
+  `;
+  document.head.appendChild(s);
+}
+
+function _tbInjectKPIArea() {
+  if (document.getElementById('tb-kpi-wrap')) return;
+  _tbInjectCSS();
+  const wrap = document.createElement('div'); wrap.id = 'tb-kpi-wrap';
+  wrap.innerHTML = `<div class="tb-kpi-row" id="tb-kpi-row"></div>
+    <div id="tb-chart-wrap"><canvas id="chart-tb-sections"></canvas></div>`;
+  const searchRow = document.querySelector('#tab-trial .search-row');
+  if (searchRow) searchRow.parentNode.insertBefore(wrap, searchRow);
+}
+
+function _tbRenderKPIs() {
+  const kpiRow = document.getElementById('tb-kpi-row');
+  if (!kpiRow || !_tbData || !_tbData.length) return;
+
+  // Use level-1 sections (direct children of root) — they carry rolled-up balances
+  const sections = _tbData.filter(r => r.levelNo === 1);
+
+  let totAssets = 0, totLiab = 0, totEquity = 0, totExp = 0, totRev = 0;
+  sections.forEach(r => {
+    const sec = r.code ? r.code[0] : '';
+    const bal = r.closeBal || 0;
+    if (sec === '1') totAssets +=  bal;
+    if (sec === '2') totLiab   += -bal;
+    if (sec === '3') totEquity += -bal;
+    if (sec === '4') totExp    +=  bal;
+    if (sec === '5') totRev    += -bal;
+  });
+
+  const fM  = n => ((+n||0)/1e6).toFixed(2) + ' م';
+  // توازن ميزان المراجعة: مجموع المدين = مجموع الدائن (مجموع صافي الأرصدة → صفر)
+  const netAllSections = sections.reduce((s, r) => s + (r.closeBal || 0), 0);
+  const balanced = Math.abs(netAllSections) < 1;
+  const netIncome = totRev - totExp;
+  const margin = totRev > 0.01 ? (netIncome / totRev * 100).toFixed(1) : '—';
+
+  kpiRow.innerHTML = `
+    <div class="tb-kpi-card">
+      <div class="tb-kpi-lbl">إجمالي الأصول</div>
+      <div class="tb-kpi-val">${fM(totAssets)}</div>
+      <div class="tb-kpi-sub">رصيد آخر الفترة</div>
+    </div>
+    <div class="tb-kpi-card">
+      <div class="tb-kpi-lbl">الخصوم + حقوق الملكية</div>
+      <div class="tb-kpi-val">${fM(totLiab + totEquity)}</div>
+      <div class="tb-kpi-sub">${fM(totLiab)} خصوم · ${fM(totEquity)} ملكية</div>
+    </div>
+    <div class="tb-kpi-card">
+      <div class="tb-kpi-lbl">صافي الدخل</div>
+      <div class="tb-kpi-val" style="color:${netIncome>=0?'#4ada8e':'#da6a6a'}">${fM(netIncome)}</div>
+      <div class="tb-kpi-sub">إيرادات ${fM(totRev)} · هامش ${margin}%</div>
+    </div>
+    <div class="tb-kpi-card" style="border-color:${balanced?'#2a5a3a':'#6a2020'}">
+      <div class="tb-kpi-lbl">حالة ميزان المراجعة</div>
+      <div class="tb-kpi-val" style="font-size:1rem;color:${balanced?'#4ada8e':'#da4a4a'}">${balanced?'✓ متوازن':'⚠ فارق ' + fM(Math.abs(netAllSections))}</div>
+      <div class="tb-kpi-sub">${_tbData.length} حساب نشط</div>
+    </div>`;
+
+  _tbRenderChart({ totAssets, totLiab, totEquity, totExp, totRev });
+}
+
+function _tbRenderChart({ totAssets, totLiab, totEquity, totExp, totRev }) {
+  const canvas = document.getElementById('chart-tb-sections');
+  if (!canvas || typeof Chart === 'undefined') return;
+  if (_tbChartInst) { _tbChartInst.destroy(); _tbChartInst = null; }
+  const fM = n => ((+n||0)/1e6).toFixed(1) + 'م';
+  _tbChartInst = new Chart(canvas.getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: ['الأصول','الخصوم','حقوق الملكية','المصروفات','الإيرادات'],
+      datasets: [{
+        data: [totAssets, totLiab, totEquity, totExp, totRev],
+        backgroundColor: ['#4a9eda','#da6a6a','#a78bfa','#f5a623','#4ada8e'],
+        borderRadius: 4, borderWidth: 0,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => '  ' + fM(ctx.raw) + ' ر.س' } }
+      },
+      scales: {
+        x: { ticks: { color:'#5a80a0', callback: v => fM(v) }, grid: { color:'#0f2035' } },
+        y: { ticks: { color:'#a0b8d0', font:{ family:'Tajawal,sans-serif', size:11 } }, grid: { display:false } }
+      }
+    }
+  });
 }
 
 // ── Excel export (ExcelJS) ────────────────────────────────────────────────────

@@ -1,6 +1,78 @@
 ﻿// ── Consolidated Dashboard (أبعاد + وسام) ────────────────────────────────────
 const CONS_DBS = ['MekSoftDb1', 'MekSoftDb2'];
 
+let _consTimer     = null;
+let _consCountdown = 0;
+const CONS_REFRESH_SEC = 60;
+function _consIsActive()  { return !!document.querySelector('.tab.active[data-tab="consolidated"]'); }
+function _consStopTimer() { if (_consTimer) { clearInterval(_consTimer); _consTimer = null; } }
+
+let _consCfTimer     = null;
+let _consCfCountdown = 0;
+function _consCfIsActive()  { return !!document.querySelector('.tab.active[data-tab="cons-cf"]'); }
+function _consCfStopTimer() { if (_consCfTimer) { clearInterval(_consCfTimer); _consCfTimer = null; } }
+function _consCfStartCountdown(operatingCF, months) {
+  _consCfStopTimer();
+  _consCfCountdown = CONS_REFRESH_SEC;
+  const el   = document.getElementById('cons-cf-status');
+  const fmM  = v => ((+v||0)/1e6).toFixed(2) + ' م';
+  const tick = () => {
+    if (!el) return;
+    const opTxt = operatingCF != null ? ` | تشغيلي: ${fmM(operatingCF)}` : '';
+    const moTxt = months ? ` | ${months} شهر` : '';
+    if (_consCfCountdown > 0) {
+      el.textContent = `✅${moTxt}${opTxt} | ${new Date().toLocaleTimeString('ar-SA')} · تحديث بعد ${_consCfCountdown}ث`;
+      el.style.color = '#1a7a3c';
+    } else {
+      el.textContent = `⏳ جارٍ إعادة التحميل...`;
+      el.style.color = '#8a7a3c';
+    }
+  };
+  tick();
+  _consCfTimer = setInterval(() => {
+    if (!_consCfIsActive()) { _consCfStopTimer(); return; }
+    _consCfCountdown = Math.max(0, _consCfCountdown - 1);
+    tick();
+    if (_consCfCountdown === 0) {
+      _consCfStopTimer();
+      State.set('consolidated', null);
+      renderConsCF();
+    }
+  }, 1000);
+}
+function _consStartCountdown(companies, revenue, netProfit) {
+  _consStopTimer();
+  _consCountdown = CONS_REFRESH_SEC;
+  const el        = document.getElementById('cons-status');
+  const fmM       = v => ((+v||0)/1e6).toFixed(2) + ' م';
+  const namesStr  = (companies || []).map(c => c.name || c.db).join(' + ');
+  const tick = () => {
+    if (!el) return;
+    const revTxt = revenue  != null ? ` | إيراد: ${fmM(revenue)}`   : '';
+    const npTxt  = netProfit != null ? ` | صافي: ${fmM(netProfit)}` : '';
+    if (_consCountdown > 0) {
+      el.textContent = `✅ ${namesStr}${revTxt}${npTxt} | ${new Date().toLocaleTimeString('ar-SA')} · تحديث بعد ${_consCountdown}ث`;
+      el.style.color = '#1a7a3c';
+    } else {
+      el.textContent = `⏳ جارٍ إعادة التحميل...`;
+      el.style.color = '#8a7a3c';
+    }
+  };
+  tick();
+  _consTimer = setInterval(() => {
+    if (!_consIsActive()) { _consStopTimer(); return; }
+    _consCountdown = Math.max(0, _consCountdown - 1);
+    tick();
+    if (_consCountdown === 0) {
+      _consStopTimer();
+      State.set('consolidated', null);
+      State.set('consFrom', null);
+      State.set('consTo', null);
+      renderConsolidatedTab();
+    }
+  }, 1000);
+}
+
 function _bsTotals(bsRows, month) {
   const latest  = month ? bsRows.filter(r => r.month === month) : [];
   const c3      = r => r.code3 || r.grpCode.slice(0, 3);
@@ -378,6 +450,8 @@ function renderConsolidatedTab() {
       </tbody>
     </table></div>`;
   }
+
+  _consStartCountdown(companies, c.revenue, c.netProfit);
 }
 
 // ── Consolidated Cash Flow tab ────────────────────────────────────────────────
@@ -568,6 +642,8 @@ function renderConsCF() {
 
   // ── Expert financial analysis ──
   _renderConsCFAnalysis(c, filtered, allCF);
+
+  _consCfStartCountdown(c?.operatingCF, allCF.length);
 }
 
 async function exportConsCFExcel() {
