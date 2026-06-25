@@ -28,6 +28,7 @@ const { getInventoryData }                                     = require('./quer
 const { getSalesInvoices }                                     = require('./queries/sales-invoices');
 const { getCCCData }                                           = require('./queries/ccc');
 const { getForecastData }                                      = require('./queries/forecast');
+const { getLiabilitiesData }                                   = require('./queries/liabilities');
 
 const app        = express();
 const PORT       = parseInt(process.env.PORT, 10)             || 3001;
@@ -796,6 +797,23 @@ app.get('/api/pl-adj-detail', async (req, res) => {
     res.json(data);
   } catch (err) {
     console.error('[api/pl-adj-detail]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /api/liabilities?db=&asOf= ────────────────────────────────────────────
+app.get('/api/liabilities', async (req, res) => {
+  const asOf = /^\d{4}-\d{2}-\d{2}$/.test(req.query.asOf || '')
+    ? req.query.asOf
+    : new Date().toISOString().slice(0, 10);
+  const db = resolveDb(req.query);
+  if (DB_NAMES.length < 2)
+    return res.status(400).json({ error: 'need at least 2 databases (DB1_NAME, DB2_NAME)' });
+  try {
+    const data = await getLiabilitiesData(DB_NAMES[0], DB_NAMES[1], db, asOf);
+    res.json(data);
+  } catch (err) {
+    console.error('[api/liabilities]', err.message);
     res.status(500).json({ error: err.message });
   }
 });

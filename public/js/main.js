@@ -20,6 +20,7 @@
   else if (name === 'safety')      renderSafetyInventory();
   else if (name === 'aging')       renderAgingTab();
   else if (name === 'ap-aging')    renderAPAgingTab();
+  else if (name === 'liabilities') renderLiabilitiesTab();
   else if (name === 'fixedassets') renderFixedAssetsTab();
   else if (name === 'stock')      renderStockTab();
   else if (name === 'finmodel')    renderFinancialModel();
