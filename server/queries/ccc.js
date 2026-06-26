@@ -21,6 +21,30 @@ async function _q1(pool, sql) {
   return r.recordset[0] || {};
 }
 
+// WAC inventory value as of a given date (< toLt for opening, <= toDate for closing).
+// Uses InventoryTransactionOnlyIncludedView directly — same methodology as inv-aging / I004.
+// Includes ALL ItemType=1 items with net qty >= 1 unit (matches I004 threshold).
+// The View's GroupCostPrice covers all transaction types including OpeningStock.Amount.
+async function _wacInv(pool, operator, date) {
+  // operator: '<' for opening (before from), '<=' for closing (through to)
+  const r = await pool.request().query(`
+    WITH TxnBase AS (
+      SELECT v.Item, v.GroupQuantity, v.GroupCostPrice
+      FROM InventoryTransactionOnlyIncludedView v
+      JOIN Item i ON i.Id = v.Item AND i.ItemType = 1
+      WHERE CAST(v.TransactionDate AS DATE) ${operator} '${date}'
+    ),
+    OnHand AS (
+      SELECT Item, SUM(GroupQuantity) AS qty, SUM(GroupCostPrice) AS cost
+      FROM TxnBase
+      GROUP BY Item
+      HAVING SUM(GroupQuantity) >= 1.0
+    )
+    SELECT ISNULL(SUM(cost), 0) AS totalVal FROM OnHand
+  `);
+  return r.recordset[0]?.totalVal || 0;
+}
+
 async function getCCCForDb(dbName, from, to) {
   const pool = await getPool(dbName);
   // Use strict inequality (< from) to avoid timezone day-shift bugs.
@@ -127,20 +151,14 @@ async function getCCCForDb(dbName, from, to) {
   const netArClose = arCloseRaw - (netRow.grossArClose || 0) + (netRow.netArClose_pos || 0);
   const avgAR      = (netArOpen + netArClose) / 2;
 
-  // ── Inventory balances (goods + transit accounts) ─────────────────────────
-  const invRow = await _q1(pool, `
-    SELECT
-      SUM(CASE WHEN CAST(jh.TransactionDate AS DATE) < '${openLt}'
-               THEN jd.Debit - jd.Credit ELSE 0 END) AS invOpen,
-      SUM(CASE WHEN CAST(jh.TransactionDate AS DATE) <= '${to}'
-               THEN jd.Debit - jd.Credit ELSE 0 END) AS invClose
-    FROM JournalVoucherHeader jh
-    JOIN JournalVoucherDetail jd ON jd.HeaderID = jh.ID
-    WHERE jd.AccountChart IN (${A.INV_GOODS},${A.INV_TRANSIT})
-  `);
-  const invOpen  = invRow.invOpen  || 0;
-  const invClose = invRow.invClose || 0;
-  const avgInv   = (invOpen + invClose) / 2;
+  // ── Inventory balances — WAC from InventoryTransactionOnlyIncludedView ────
+  // GL method (41+305) distorted by transit account 305 having a negative credit
+  // balance that drags invClose below the physical stock value. WAC matches I004 (±0.02%).
+  const [invOpen, invClose] = await Promise.all([
+    _wacInv(pool, '<',  from),
+    _wacInv(pool, '<=', to),
+  ]);
+  const avgInv = (invOpen + invClose) / 2;
 
   // ── AP balances full (ح.77+78) — kept for reconciliation display ────────────
   const apRow = await _q1(pool, `
