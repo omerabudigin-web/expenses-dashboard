@@ -23,6 +23,7 @@
   else if (name === 'liabilities') renderLiabilitiesTab();
   else if (name === 'fixedassets') renderFixedAssetsTab();
   else if (name === 'stock')      renderStockTab();
+  else if (name === 'inv-aging')  renderInventoryAging();
   else if (name === 'finmodel')    renderFinancialModel();
   else if (name === 'inventory')     renderInventoryAnalysis();
   else if (name === 'manufacturing') renderManufacturing();

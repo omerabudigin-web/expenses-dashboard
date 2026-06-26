@@ -29,6 +29,7 @@ const { getSalesInvoices }                                     = require('./quer
 const { getCCCData }                                           = require('./queries/ccc');
 const { getForecastData }                                      = require('./queries/forecast');
 const { getLiabilitiesData }                                   = require('./queries/liabilities');
+const { getInventoryAging }                                    = require('./queries/inv-aging');
 
 const app        = express();
 const PORT       = parseInt(process.env.PORT, 10)             || 3001;
@@ -797,6 +798,19 @@ app.get('/api/pl-adj-detail', async (req, res) => {
     res.json(data);
   } catch (err) {
     console.error('[api/pl-adj-detail]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /api/inv-aging?db=&branch= ───────────────────────────────────────────
+app.get('/api/inv-aging', async (req, res) => {
+  const dbName = resolveDb(req.query);
+  const branch = req.query.branch || 'all';
+  try {
+    const data = await getInventoryAging(dbName, branch);
+    res.json(data);
+  } catch (err) {
+    console.error('[api/inv-aging]', err.message);
     res.status(500).json({ error: err.message });
   }
 });
