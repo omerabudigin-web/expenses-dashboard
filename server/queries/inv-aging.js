@@ -1,23 +1,28 @@
 'use strict';
 const { getPool } = require('../db');
 
+// I004 methodology:
+//   - All ItemType=1 items, no category exclusions
+//   - Minimum qty threshold: >= 1.0 base unit (matches I004 behaviour of hiding < 1 unit)
+//   - Branch 1 view: items with any B1 stock, valued at TOTAL company qty × MAC
+//     (matches I004 "الفرع الرئيسي" showing company-wide value per item)
+//   - Branch 2 view: items with B2 stock, valued at B2 qty × MAC
 const SQL = `
 WITH ItemBase AS (
   SELECT i.Id, i.Code, i.NameAr, ic.NameAr AS category, ic.Id AS catId
   FROM Item i
   JOIN ItemCategory ic ON ic.Id = i.Category
   WHERE i.ItemType = 1
-    AND ic.NameAr NOT LIKE N'%سلامة%'
 ),
 OnHand AS (
   SELECT v.Item,
-    SUM(v.GroupQuantity) AS totalQty,
-    SUM(CASE WHEN v.Branch = 1 THEN v.GroupQuantity ELSE 0 END) AS qtyBranch1,
-    SUM(CASE WHEN v.Branch = 2 THEN v.GroupQuantity ELSE 0 END) AS qtyBranch2
+    SUM(v.GroupQuantity)                                              AS totalQty,
+    SUM(CASE WHEN v.Branch = 1 THEN v.GroupQuantity ELSE 0 END)      AS qtyBranch1,
+    SUM(CASE WHEN v.Branch = 2 THEN v.GroupQuantity ELSE 0 END)      AS qtyBranch2
   FROM InventoryTransactionOnlyIncludedView v
   JOIN ItemBase f ON f.Id = v.Item
   GROUP BY v.Item
-  HAVING SUM(v.GroupQuantity) > 0.001
+  HAVING SUM(v.GroupQuantity) >= 1.0
 ),
 OpeningCost AS (
   SELECT Item, SUM(Amount) AS v FROM OpeningStockDetail
@@ -51,12 +56,12 @@ Costs AS (
   SELECT oh.Item,
     ISNULL(oc.v,0)+ISNULL(rc.v,0)+ISNULL(ic.v,0)+ISNULL(dc.v,0)+ISNULL(dec.v,0)+ISNULL(tic.v,0)+ISNULL(toc.v,0) AS totalCost
   FROM OnHand oh
-  LEFT JOIN OpeningCost oc ON oc.Item = oh.Item
-  LEFT JOIN ReceiptCost rc ON rc.Item = oh.Item
-  LEFT JOIN IncreaseCost ic ON ic.Item = oh.Item
-  LEFT JOIN DeliverCost dc ON dc.Item = oh.Item
-  LEFT JOIN DecreaseCost dec ON dec.Item = oh.Item
-  LEFT JOIN TransferInCost tic ON tic.Item = oh.Item
+  LEFT JOIN OpeningCost   oc  ON oc.Item  = oh.Item
+  LEFT JOIN ReceiptCost   rc  ON rc.Item  = oh.Item
+  LEFT JOIN IncreaseCost  ic  ON ic.Item  = oh.Item
+  LEFT JOIN DeliverCost   dc  ON dc.Item  = oh.Item
+  LEFT JOIN DecreaseCost  dec ON dec.Item = oh.Item
+  LEFT JOIN TransferInCost  tic ON tic.Item = oh.Item
   LEFT JOIN TransferOutCost toc ON toc.Item = oh.Item
 ),
 LastSale AS (
@@ -83,8 +88,8 @@ Result AS (
     DATEDIFF(day, COALESCE(ls.lastSaleDate, li.lastInDate), GETDATE()) AS ageDays
   FROM OnHand oh
   JOIN ItemBase f ON f.Id = oh.Item
-  JOIN Costs c ON c.Item = oh.Item
-  LEFT JOIN LastSale ls ON ls.Item = oh.Item
+  JOIN Costs    c ON c.Item = oh.Item
+  LEFT JOIN LastSale    ls ON ls.Item = oh.Item
   LEFT JOIN LastInbound li ON li.Item = oh.Item
 )
 SELECT *,
@@ -97,37 +102,52 @@ SELECT *,
   END AS bucket,
   totalQty * mac AS value
 FROM Result
-ORDER BY ISNULL(ageDays, 99999) DESC, value DESC
+ORDER BY ISNULL(ageDays, 99999) DESC, (totalQty * mac) DESC
 `;
 
 async function getInventoryAging(dbName, branch) {
   const pool = await getPool(dbName);
-  const res = await pool.request().query(SQL);
-  let rows = res.recordset;
+  const res  = await pool.request().query(SQL);
+  let rows   = res.recordset;
+
+  // Branch filtering:
+  //   branch=1 → items with any B1 stock; value = total company qty × MAC (I004 style)
+  //   branch=2 → items with B2 stock; value = B2 qty × MAC (factory-only view)
+  //   branch=all → all items; value = total company qty × MAC
+  let displayField  = null;   // qty column to show in the table
+  let valueOverride = null;   // 'b2' → use B2 qty for value calc; else use totalQty
 
   if (branch && branch !== 'all') {
     const b = parseInt(branch, 10);
-    const field = b === 1 ? 'qtyBranch1' : b === 2 ? 'qtyBranch2' : null;
-    if (field) {
-      rows = rows
-        .filter(r => (r[field] || 0) > 0.001)
-        .map(r => ({ ...r, displayQty: r[field] }));
+    if (b === 1) {
+      rows = rows.filter(r => (r.qtyBranch1 || 0) >= 1.0);
+      displayField = 'qtyBranch1';
+      // value stays as totalQty × MAC (company-wide, I004 methodology)
+    } else if (b === 2) {
+      rows = rows.filter(r => (r.qtyBranch2 || 0) >= 1.0);
+      displayField  = 'qtyBranch2';
+      valueOverride = 'b2';   // value = B2 qty × MAC
     }
   }
 
-  const items = rows.map(r => ({
-    itemId:       r.itemId,
-    code:         r.Code,
-    name:         r.NameAr,
-    category:     r.category,
-    qty:          parseFloat((r.displayQty ?? r.totalQty).toFixed(3)),
-    mac:          parseFloat((r.mac || 0).toFixed(2)),
-    value:        parseFloat(((r.displayQty ?? r.totalQty) * r.mac).toFixed(2)),
-    lastSaleDate: r.lastSaleDate ? r.lastSaleDate.toISOString().slice(0, 10) : null,
-    lastInDate:   r.lastInDate   ? r.lastInDate.toISOString().slice(0, 10)   : null,
-    ageDays:      r.ageDays ?? null,
-    bucket:       r.ageDays == null ? '>365' : r.bucket,
-  }));
+  const items = rows.map(r => {
+    const dispQty = displayField ? (r[displayField] || 0) : r.totalQty;
+    const valQty  = valueOverride === 'b2' ? (r.qtyBranch2 || 0) : r.totalQty;
+    const mac     = r.mac || 0;
+    return {
+      itemId:       r.itemId,
+      code:         r.Code,
+      name:         r.NameAr,
+      category:     r.category,
+      qty:          parseFloat(dispQty.toFixed(3)),
+      mac:          parseFloat(mac.toFixed(2)),
+      value:        parseFloat((valQty * mac).toFixed(2)),
+      lastSaleDate: r.lastSaleDate ? r.lastSaleDate.toISOString().slice(0, 10) : null,
+      lastInDate:   r.lastInDate   ? r.lastInDate.toISOString().slice(0, 10)   : null,
+      ageDays:      r.ageDays ?? null,
+      bucket:       r.ageDays == null ? '>365' : r.bucket,
+    };
+  });
 
   const bucketOrder = ['0-30', '31-90', '91-180', '181-365', '>365'];
   const byBucket = {};
