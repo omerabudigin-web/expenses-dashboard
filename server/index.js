@@ -30,6 +30,7 @@ const { getCCCData }                                           = require('./quer
 const { getForecastData }                                      = require('./queries/forecast');
 const { getLiabilitiesData }                                   = require('./queries/liabilities');
 const { getInventoryAging }                                    = require('./queries/inv-aging');
+const { getItemProfitability }                                 = require('./queries/item-profitability');
 
 const app        = express();
 const PORT       = parseInt(process.env.PORT, 10)             || 3001;
@@ -811,6 +812,20 @@ app.get('/api/inv-aging', async (req, res) => {
     res.json(data);
   } catch (err) {
     console.error('[api/inv-aging]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /api/item-profitability?db=&from=&to= ─────────────────────────────────
+app.get('/api/item-profitability', async (req, res) => {
+  const dbName = resolveDb(req.query);
+  const from   = /^\d{4}-\d{2}-\d{2}$/.test(req.query.from || '') ? req.query.from : START_DATE;
+  const to     = /^\d{4}-\d{2}-\d{2}$/.test(req.query.to   || '') ? req.query.to   : new Date().toISOString().slice(0, 10);
+  try {
+    const data = await getItemProfitability(dbName, from, to);
+    res.json(data);
+  } catch (err) {
+    console.error('[api/item-profitability]', err.message);
     res.status(500).json({ error: err.message });
   }
 });
