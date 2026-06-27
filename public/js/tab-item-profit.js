@@ -353,6 +353,8 @@ function _ipRenderInsights(d) {
     points.push(`<strong style="color:#e05a5a">${losers.length} أصناف تُباع بخسارة</strong>:
       إيرادها ${_ipFmt(lossRev)} ر.س وخسارتها ${_ipFmt(Math.abs(lossPft))} ر.س.
       أبرزها: ${losers.slice(0,3).map(it => `<em>${it.name.slice(0,18)}</em> (${it.margin.toFixed(1)}%)`).join('، ')}.`);
+    points.push(`<span style="color:#e08c5a">⚠️ ملاحظة: جزء من هذه الأصناف (خصوصاً مجموعة الراجحي) يخضع للتحويل بالتصنيع، فخسارته دفترية لا فعلية
+      — راجع بطاقة <em>(لماذا تظهر بعض الأصناف خاسرة؟)</em> قبل أي قرار تسعير أو إيقاف.</span>`);
   }
 
   if (lowMrg.length > 0) {
