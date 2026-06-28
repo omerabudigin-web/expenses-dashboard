@@ -31,6 +31,8 @@ const { getForecastData }                                      = require('./quer
 const { getLiabilitiesData }                                   = require('./queries/liabilities');
 const { getInventoryAging }                                    = require('./queries/inv-aging');
 const { getItemProfitability }                                 = require('./queries/item-profitability');
+const { getARCollection }                                      = require('./queries/ar-collection');
+const { getIntercoRecon }                                      = require('./queries/interco-recon');
 
 const app        = express();
 const PORT       = parseInt(process.env.PORT, 10)             || 3001;
@@ -826,6 +828,31 @@ app.get('/api/item-profitability', async (req, res) => {
     res.json(data);
   } catch (err) {
     console.error('[api/item-profitability]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /api/ar-collection?db=&from= ──────────────────────────────────────────
+app.get('/api/ar-collection', async (req, res) => {
+  const dbName = resolveDb(req.query);
+  const from   = /^\d{4}-\d{2}-\d{2}$/.test(req.query.from || '') ? req.query.from : START_DATE;
+  try {
+    const data = await getARCollection(dbName, from);
+    res.json(data);
+  } catch (err) {
+    console.error('[api/ar-collection]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /api/interco-recon?from= ──────────────────────────────────────────────
+app.get('/api/interco-recon', async (req, res) => {
+  const from = /^\d{4}-\d{2}-\d{2}$/.test(req.query.from || '') ? req.query.from : START_DATE;
+  try {
+    const data = await getIntercoRecon(from);
+    res.json(data);
+  } catch (err) {
+    console.error('[api/interco-recon]', err.message);
     res.status(500).json({ error: err.message });
   }
 });

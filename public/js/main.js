@@ -18,6 +18,8 @@
   else if (name === 'trial')       renderTrialBalance();
   else if (name === 'is')          renderIncomeStatement();
   else if (name === 'safety')      renderSafetyInventory();
+  else if (name === 'ar-collection') renderARCollection();
+  else if (name === 'interco-recon') renderIntercoRecon();
   else if (name === 'aging')       renderAgingTab();
   else if (name === 'ap-aging')    renderAPAgingTab();
   else if (name === 'liabilities') renderLiabilitiesTab();
