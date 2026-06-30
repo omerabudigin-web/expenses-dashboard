@@ -18,10 +18,13 @@ const AR_MONTHS = ['','يناير','فبراير','مارس','أبريل','ما�
  * Prior approach put 4010301001, 4020106008, 4020106010 into COGS as "landed costs".
  * That diverged from the ERP P&L which keeps all of these in OpEx. Removed.
  */
-async function getPLMonthly(dbName, startDate) {
-  const pool = await getPool(dbName);
+async function getPLMonthly(dbName, startDate, endDate = null) {
+  const pool      = await getPool(dbName);
+  // If no endDate supplied, use today so the upper bound is always explicit in SQL
+  const endParam  = endDate || new Date().toISOString().slice(0, 10);
   const res  = await pool.request()
     .input('startDate', sql.Date, startDate)
+    .input('endDate',   sql.Date, endParam)
     .query(`
       WITH
 
@@ -83,6 +86,7 @@ async function getPLMonthly(dbName, startDate) {
         JOIN JournalVoucherDetail  jd ON jd.HeaderID = h.ID
         JOIN AccountChart          ac ON ac.ID = jd.AccountChart
         WHERE h.TransactionDate >= @startDate
+          AND h.TransactionDate < DATEADD(day, 1, CAST(@endDate AS date))
           AND (ac.Code LIKE '5%' OR ac.Code LIKE '4%')
         GROUP BY YEAR(h.TransactionDate), MONTH(h.TransactionDate)
       )

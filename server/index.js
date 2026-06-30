@@ -33,6 +33,8 @@ const { getInventoryAging }                                    = require('./quer
 const { getItemProfitability }                                 = require('./queries/item-profitability');
 const { getARCollection }                                      = require('./queries/ar-collection');
 const { getIntercoRecon }                                      = require('./queries/interco-recon');
+const { getVatReturn }                                         = require('./queries/vat-return');
+const { getExecutiveSummary }                                  = require('./queries/executive');
 
 const app        = express();
 const PORT       = parseInt(process.env.PORT, 10)             || 3001;
@@ -854,6 +856,38 @@ app.get('/api/interco-recon', async (req, res) => {
   } catch (err) {
     console.error('[api/interco-recon]', err.message);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /api/vat-return?company=abaad|wissam&from=YYYY-MM-DD&to=YYYY-MM-DD ────
+app.get('/api/vat-return', async (req, res) => {
+  const dateRx  = /^\d{4}-\d{2}-\d{2}$/;
+  const company = ['abaad', 'wissam'].includes(req.query.company) ? req.query.company : 'abaad';
+  const from    = dateRx.test(req.query.from || '') ? req.query.from : START_DATE;
+  const to      = dateRx.test(req.query.to   || '') ? req.query.to   : new Date().toISOString().slice(0, 10);
+  try {
+    const data = await getVatReturn(company, from, to);
+    res.json(data);
+  } catch (err) {
+    console.error('[api/vat-return]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /api/executive-summary?db=&from=&to=&asOf= ───────────────────────────
+app.get('/api/executive-summary', async (req, res) => {
+  const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+  const db   = resolveDb(req.query);
+  const today = new Date().toISOString().slice(0, 10);
+  const from = DATE_RE.test(req.query.from || '') ? req.query.from : START_DATE;
+  const to   = DATE_RE.test(req.query.to   || '') ? req.query.to   : today;
+  const asOf = DATE_RE.test(req.query.asOf || '') ? req.query.asOf : today;
+  try {
+    const data = await getExecutiveSummary(db, from, to, asOf);
+    res.json(data);
+  } catch (err) {
+    console.error('[api/executive-summary]', err.message);
+    res.status(500).json({ error: 'query failed', message: err.message });
   }
 });
 
