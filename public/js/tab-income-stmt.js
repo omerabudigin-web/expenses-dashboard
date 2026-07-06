@@ -35,6 +35,8 @@ function _isStartCountdown(rowCount) {
 
 let _isData       = null;
 let _isCmpData    = null;   // comparison period (same period, previous year)
+let _isSummary    = null;   // whole-statement Revenue/COGS/Gross Profit/Net Profit
+let _isCmpSummary = null;
 let _isInited     = false;
 let _isRootFilter = null;
 let _isTreeData      = null;
@@ -97,6 +99,7 @@ function initIncomeStatement() {
     treeBtn.addEventListener('click', () => {
       _isTreeMode = !_isTreeMode;
       _isTreeData = null; _isData = null; _isCmpData = null;
+      _isSummary = null; _isCmpSummary = null; _renderISKPIs();
       treeBtn.style.background = _isTreeMode ? '#0d3a4a' : '#0d2a3a';
       treeBtn.style.color      = _isTreeMode ? '#a0e8f8' : '#70c8e8';
       treeBtn.style.border     = _isTreeMode ? '1px solid #3a8aaa' : '1px solid #2a5a7a';
@@ -130,7 +133,10 @@ async function _isPopulateBranches() {
   } catch (_) {}
 }
 
-function _isResetData() { _isData = null; _isCmpData = null; _isRootFilter = null; _isUpdateBreadcrumb(); _renderISRows(); }
+function _isResetData() {
+  _isData = null; _isCmpData = null; _isSummary = null; _isCmpSummary = null;
+  _isRootFilter = null; _isUpdateBreadcrumb(); _renderISRows();
+}
 
 function _isUpdateBreadcrumb() {
   const el = document.getElementById('is-breadcrumb');
@@ -183,14 +189,16 @@ async function fetchIncomeStatement() {
     const fetches = [
       fetch(`/api/income-statement?${params}`).then(r => r.ok ? r.json() : r.json().then(e => { throw new Error(e.error); })),
       wantCmp
-        ? fetch(`/api/income-statement?${cmpParams}`).then(r => r.ok ? r.json() : Promise.resolve([]))
+        ? fetch(`/api/income-statement?${cmpParams}`).then(r => r.ok ? r.json() : Promise.resolve(null))
         : Promise.resolve(null),
     ];
-    const [rows, cmpRows] = await Promise.all(fetches);
-    _isData    = rows;
-    _isCmpData = cmpRows;
+    const [result, cmpResult] = await Promise.all(fetches);
+    _isData       = result.rows;
+    _isSummary    = result.summary;
+    _isCmpData    = cmpResult ? cmpResult.rows    : null;
+    _isCmpSummary = cmpResult ? cmpResult.summary : null;
     _renderISRows();
-    _isStartCountdown(rows.length);
+    _isStartCountdown(_isData.length);
   } catch (e) {
     tbodyEl.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:32px;color:#da4a4a">خطأ: ${esc(e.message)}</td></tr>`;
     statusEl.textContent = 'فشل التحميل';
@@ -402,6 +410,35 @@ window._isDrillIn = function(code, name) {
   fetchIncomeStatement();
 };
 
+// Professional-statement KPI strip: Revenue → COGS → Gross Profit → OpEx → Net Profit.
+// Always reflects the whole entity (ignores drill-down/rootCode filter) — a "gross profit"
+// figure isn't meaningful once you've filtered to one branch of the account tree.
+function _renderISKPIs() {
+  const wrap = document.getElementById('is-kpis');
+  if (!wrap) return;
+  if (!_isSummary) { wrap.innerHTML = ''; return; }
+
+  const s  = _isSummary;
+  const cs = _isCmpSummary;
+  const fmtSg = n => n >= 0 ? fmt(n, 2) : `(${fmt(-n, 2)})`;
+  const dBadge = (cur, prev) => {
+    if (prev == null || Math.abs(prev) < 1) return '';
+    const d = cur - prev; const pct = d / Math.abs(prev) * 100;
+    const col = d >= 0 ? '#4ada8e' : '#da4a4a'; const arrow = d >= 0 ? '▲' : '▼';
+    return `<span style="color:${col};margin-left:5px">${arrow} ${Math.abs(pct).toFixed(1)}%</span>`;
+  };
+  const items = [
+    { lbl: 'إجمالي الإيرادات',      val: fmtSg(s.revenueTotal), sub: `${dBadge(s.revenueTotal, cs?.revenueTotal)}100% من الإيراد`,                    accent: '#4ada8e' },
+    { lbl: 'تكلفة المبيعات',        val: `(${fmt(s.costOfSales, 2)})`, sub: s.revenueTotal ? (s.costOfSales/s.revenueTotal*100).toFixed(1)+'% من الإيراد' : '—', accent: '#e0906a' },
+    { lbl: 'مجمل الربح',            val: fmtSg(s.grossProfit),  sub: `${dBadge(s.grossProfit, cs?.grossProfit)}هامش ${s.grossMargin.toFixed(1)}%`,     accent: s.grossProfit>=0 ? '#5baef0' : '#da4a4a' },
+    { lbl: 'المصروفات التشغيلية',   val: `(${fmt(s.opexTotal, 2)})`, sub: s.revenueTotal ? (s.opexTotal/s.revenueTotal*100).toFixed(1)+'% من الإيراد' : '—', accent: '#da9a4a' },
+    { lbl: s.netProfit>=0 ? 'صافي الربح' : 'صافي الخسارة', val: fmtSg(s.netProfit), sub: `${dBadge(s.netProfit, cs?.netProfit)}هامش ${s.revenueTotal ? (s.netProfit/s.revenueTotal*100).toFixed(1) : '0'}%`, accent: s.netProfit>=0 ? '#4ada8e' : '#da4a4a' },
+  ];
+  wrap.innerHTML = items.map(k =>
+    `<div class="kpi" style="--accent:${k.accent}"><div class="lbl">${k.lbl}</div><div class="val">${k.val} ر.س</div><div class="sub">${k.sub}</div></div>`
+  ).join('');
+}
+
 function _renderISRows() {
   const tbody   = document.getElementById('is-tbody');
   const tfoot   = document.getElementById('is-tfoot');
@@ -409,6 +446,8 @@ function _renderISRows() {
   const countEl = document.getElementById('is-count');
   const badgeEl = document.getElementById('is-net-badge');
   if (!tbody) return;
+
+  _renderISKPIs();
 
   if (!_isData) {
     tfoot.innerHTML = '';
@@ -834,6 +873,40 @@ async function exportISExcel() {
     addTitle(`المبالغ بالريال السعودي  —  أُنشئ: ${genDate}`, 8.5, CLR.textLight, CLR.navyDark);
     addSpacer(4);
 
+    // ── Statement summary — Revenue / COGS / Gross Profit / OpEx / Net Profit ──
+    // Always the whole entity's numbers (ignores any drill-down filter below) —
+    // "gross profit" only makes sense for the full statement.
+    if (_isSummary) {
+      const sm = _isSummary, cm = _isCmpSummary;
+      addSecHdr('ملخص القائمة — الأرقام الرئيسية');
+      addSubTot('إجمالي الإيرادات',   null, null, sm.revenueTotal,  cm?.revenueTotal ?? null);
+      addSubTot('(-) تكلفة المبيعات', null, null, -sm.costOfSales,  cm ? -cm.costOfSales : null);
+      {
+        const row = ws.addRow(['مجمل الربح','','','',sm.grossProfit,
+          ...(withCmp ? [cm?.grossProfit ?? null, null] : [])]);
+        row.height = 22;
+        const bord = { top: bdr('double', CLR.navyDark), bottom: bdr('medium', CLR.navyDark) };
+        row.eachCell({ includeEmpty:true }, c => { c.fill = solid(CLR.greenBg); c.border = bord; });
+        row.getCell(1).font = { name:FONT, size:10.5, bold:true, color:{ argb:CLR.greenText } };
+        row.getCell(1).alignment = { horizontal:'right', vertical:'middle' };
+        setNum(row.getCell(5), sm.grossProfit, numFmt, CLR.greenText, true);
+        row.getCell(5).font = { name:FONT, size:10.5, bold:true, color:{ argb:CLR.greenText } };
+        if (withCmp) {
+          setNum(row.getCell(6), cm?.grossProfit ?? null, numFmt, CLR.textGray, false);
+          row.getCell(6).fill = solid('FFF0F4FA');
+          if (cm && Math.abs(cm.grossProfit) > 0.01) {
+            row.getCell(7).value  = +((sm.grossProfit - cm.grossProfit) / Math.abs(cm.grossProfit) * 100).toFixed(1);
+            row.getCell(7).numFmt = '0.0"%"';
+            row.getCell(7).font   = { name:FONT, size:9, bold:true, color:{ argb:CLR.greenText } };
+          }
+          row.getCell(7).alignment = { horizontal:'center', vertical:'middle' };
+          row.getCell(7).fill = solid('FFF0F4FA');
+        }
+      }
+      addSubTot('(-) المصروفات التشغيلية', null, null, -sm.opexTotal, cm ? -cm.opexTotal : null);
+      addSpacer(6);
+    }
+
     // ── Column header ────────────────────────────────────────────────────────
     {
       const hdr = ['كود الحساب','البيان','مدين الفترة','دائن الفترة','الصافي (ر.س)'];
@@ -1060,6 +1133,16 @@ td{padding:7px 12px;border-bottom:1px solid #f0f2f4;font-size:.82rem;color:#2a3a
 .net-profit{background:#e6f9ee;border:1px solid #2ab070;color:#1a5a2a}
 .net-loss{background:#fde8e8;border:1px solid #b04040;color:#7a1a1a}
 .foot{margin-top:14px;font-size:.73rem;color:#888;text-align:center}
+.stmt-summary{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:18px}
+.stmt-kpi{background:#fff;border:1px solid #dee2e6;border-radius:8px;padding:12px 14px;border-right:4px solid #1a3a5a}
+.stmt-kpi .lbl{font-size:.72rem;color:#667;margin-bottom:5px}
+.stmt-kpi .val{font-size:1.02rem;font-weight:700;color:#1a3a5a;font-variant-numeric:tabular-nums}
+.stmt-kpi .sub{font-size:.68rem;color:#889;margin-top:3px}
+.stmt-kpi.gross{border-right-color:#2ab070;background:#f4fdf8}
+.stmt-kpi.gross .val{color:#1a6a2a}
+.stmt-kpi.net{border-right-color:#1a5a2a}
+@media print{.stmt-summary{grid-template-columns:repeat(5,1fr)}}
+@media(max-width:900px){.stmt-summary{grid-template-columns:repeat(2,1fr)}}
 @media print{body{padding:10px;background:#fff}.cover{border:none;padding:10px 0}.foot{display:none}}
 </style></head>
 <body>
@@ -1074,6 +1157,18 @@ td{padding:7px 12px;border-bottom:1px solid #f0f2f4;font-size:.82rem;color:#2a3a
     <strong>تاريخ الإصدار:</strong> ${new Date().toLocaleDateString('ar-SA',{year:'numeric',month:'long',day:'numeric'})}
   </div>
 </div>
+${_isSummary ? (() => {
+  const sm = _isSummary;
+  const fmtSg = n => n >= 0 ? fmtN(n) : `(${fmtN(-n)})`;
+  const items = [
+    { lbl:'إجمالي الإيرادات',    val: fmtSg(sm.revenueTotal), sub: '100% من الإيراد', cls:'' },
+    { lbl:'تكلفة المبيعات',      val: `(${fmtN(sm.costOfSales)})`, sub: sm.revenueTotal ? (sm.costOfSales/sm.revenueTotal*100).toFixed(1)+'% من الإيراد' : '—', cls:'' },
+    { lbl:'مجمل الربح',          val: fmtSg(sm.grossProfit), sub: 'هامش '+sm.grossMargin.toFixed(1)+'%', cls:'gross' },
+    { lbl:'المصروفات التشغيلية', val: `(${fmtN(sm.opexTotal)})`, sub: sm.revenueTotal ? (sm.opexTotal/sm.revenueTotal*100).toFixed(1)+'% من الإيراد' : '—', cls:'' },
+    { lbl: sm.netProfit>=0?'صافي الربح':'صافي الخسارة', val: fmtSg(sm.netProfit), sub: 'هامش '+(sm.revenueTotal?(sm.netProfit/sm.revenueTotal*100).toFixed(1):'0')+'%', cls:'net' },
+  ];
+  return `<div class="stmt-summary">${items.map(k=>`<div class="stmt-kpi ${k.cls}"><div class="lbl">${k.lbl}</div><div class="val">${k.val} ر.س</div><div class="sub">${k.sub}</div></div>`).join('')}</div>`;
+})() : ''}
 <table>
 <thead>
   <tr>

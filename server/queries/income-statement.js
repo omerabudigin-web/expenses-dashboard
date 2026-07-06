@@ -40,7 +40,11 @@ async function getIncomeStatement(dbName, { from, to, level, branch, rootCode })
     `),
   ]);
 
-  if (!jdRes.recordset.length) return [];
+  const emptySummary = {
+    revenueTotal: 0, cogsTotal: 0, otherDirectCostTotal: 0, costOfSales: 0,
+    grossProfit: 0, grossMargin: 0, expenseTotal: 0, opexTotal: 0, netProfit: 0,
+  };
+  if (!jdRes.recordset.length) return { rows: [], summary: emptySummary };
 
   // ── Account map ─────────────────────────────────────────────────────────────
   const acMap = new Map();
@@ -97,19 +101,36 @@ async function getIncomeStatement(dbName, { from, to, level, branch, rootCode })
   }
 
   // ── Aggregate ────────────────────────────────────────────────────────────────
+  // Two accumulators over the same leaf-level rows:
+  //   aggMap   → drill-level rows for the grid (respects rootCode filter)
+  //   summary  → whole-statement Revenue/COGS/Gross Profit/Net Profit,
+  //              always computed over the FULL P&L regardless of rootCode,
+  //              since "gross profit" only makes sense for the entity as a whole.
   const aggMap = new Map();
+  let revenueTotal = 0, cogsTotal = 0, otherDirectCostTotal = 0, expenseTotal = 0;
 
   for (const row of jdRes.recordset) {
     const leaf = acMap.get(row.leafID);
     if (!leaf) continue;
-    if (!['4','5','6','7'].includes(leaf.code.charAt(0))) continue;
+    const codeChar = leaf.code.charAt(0);
+    if (!['4','5','6','7'].includes(codeChar)) continue;
+
+    const dr = +row.pDebit  || 0;
+    const cr = +row.pCredit || 0;
+
+    if (['5','6','7'].includes(codeChar)) {
+      revenueTotal += cr - dr;
+    } else {
+      const net = dr - cr;
+      expenseTotal += net;
+      if      (leaf.code.startsWith('40101010')) cogsTotal            += net;
+      else if (leaf.code.startsWith('40101020')) otherDirectCostTotal += net;
+    }
 
     const anc = resolveAncestor(row.leafID);
     if (!anc) continue;
     if (allowedAncs && !allowedAncs.has(anc.id)) continue;
 
-    const dr = +row.pDebit  || 0;
-    const cr = +row.pCredit || 0;
     if (aggMap.has(anc.id)) {
       aggMap.get(anc.id).pDebit  += dr;
       aggMap.get(anc.id).pCredit += cr;
@@ -118,7 +139,18 @@ async function getIncomeStatement(dbName, { from, to, level, branch, rootCode })
     }
   }
 
-  return [...aggMap.values()]
+  const costOfSales = cogsTotal + otherDirectCostTotal;
+  const grossProfit = revenueTotal - costOfSales;
+  const summary = {
+    revenueTotal, cogsTotal, otherDirectCostTotal, costOfSales,
+    grossProfit,
+    grossMargin: revenueTotal ? grossProfit / revenueTotal * 100 : 0,
+    expenseTotal,
+    opexTotal:  expenseTotal - costOfSales,
+    netProfit:  revenueTotal - expenseTotal,
+  };
+
+  const rows = [...aggMap.values()]
     .map(({ ac, pDebit, pCredit }) => {
       const isRev = ['5','6','7'].includes(ac.code.charAt(0));
       const par   = ac.parentID ? acMap.get(ac.parentID) : null;
@@ -135,6 +167,8 @@ async function getIncomeStatement(dbName, { from, to, level, branch, rootCode })
       };
     })
     .sort((a, b) => a.code.localeCompare(b.code));
+
+  return { rows, summary };
 }
 
 /*

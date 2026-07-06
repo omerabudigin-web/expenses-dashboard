@@ -555,13 +555,13 @@ app.get('/api/income-statement', async (req, res) => {
     return res.status(400).json({ error: 'level must be 1–9' });
   const rcode = (rootCode || '').replace(/[^0-9]/g, '').substring(0, 20);
   try {
-    const rows = await getIncomeStatement(dbName, {
+    const result = await getIncomeStatement(dbName, {
       from, to,
       level:    lvl,
       branch:   parseInt(branch, 10) || 0,
       rootCode: rcode,
     });
-    res.json(rows);
+    res.json(result);
   } catch (err) {
     console.error('[api/income-statement]', err.message);
     res.status(500).json({ error: err.message });
