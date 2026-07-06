@@ -36,6 +36,7 @@ const { getIntercoRecon }                                      = require('./quer
 const { getVatReturn }                                         = require('./queries/vat-return');
 const { getExecutiveSummary }                                  = require('./queries/executive');
 const dscrRoute                                                = require('./routes/dscr');
+const financingRoute                                           = require('./routes/financing');
 
 const app        = express();
 const PORT       = parseInt(process.env.PORT, 10)             || 3001;
@@ -47,12 +48,13 @@ app.use(
   helmet({
     contentSecurityPolicy: {
       directives: {
-        defaultSrc: ["'self'"],
-        scriptSrc:  ["'self'", 'https://cdn.jsdelivr.net', "'unsafe-inline'"],
-        styleSrc:   ["'self'", "'unsafe-inline'"],
-        connectSrc: ["'self'"],
-        imgSrc:     ["'self'", 'data:'],
-        fontSrc:    ["'self'", 'data:'],
+        defaultSrc:    ["'self'"],
+        scriptSrc:     ["'self'", 'https://cdn.jsdelivr.net', 'https://cdnjs.cloudflare.com', "'unsafe-inline'"],
+        scriptSrcAttr: ["'unsafe-inline'"], // several tabs (interco-recon, dscr, financing) use inline onclick/onblur/onchange
+        styleSrc:      ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+        connectSrc:    ["'self'"],
+        imgSrc:        ["'self'", 'data:'],
+        fontSrc:       ["'self'", 'data:', 'https://fonts.gstatic.com'],
       },
     },
     crossOriginEmbedderPolicy: false,
@@ -60,6 +62,7 @@ app.use(
 );
 
 app.use(express.static(path.join(__dirname, '../public')));
+app.use(express.json());
 
 // Validates and resolves the ?db= query param against the whitelist
 function resolveDb(query) {
@@ -79,6 +82,9 @@ app.get('/api/config', (_req, res) => {
 
 // ── DSCR ───────────────────────────────────────────────────────────────────────
 app.use('/api/dscr', dscrRoute);
+
+// ── Financing register ─────────────────────────────────────────────────────────
+app.use('/api/financing', financingRoute);
 
 // ── GET /api/health ────────────────────────────────────────────────────────────
 app.get('/api/health', (_req, res) => {
