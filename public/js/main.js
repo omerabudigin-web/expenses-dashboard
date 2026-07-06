@@ -22,6 +22,7 @@
   else if (name === 'ar-collection') renderARCollection();
   else if (name === 'interco-recon') renderIntercoRecon();
   else if (name === 'vat-return')  renderVatReturn();
+  else if (name === 'dscr')        renderDscrTab();
   else if (name === 'aging')       renderAgingTab();
   else if (name === 'ap-aging')    renderAPAgingTab();
   else if (name === 'liabilities') renderLiabilitiesTab();

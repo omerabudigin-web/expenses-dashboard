@@ -35,6 +35,7 @@ const { getARCollection }                                      = require('./quer
 const { getIntercoRecon }                                      = require('./queries/interco-recon');
 const { getVatReturn }                                         = require('./queries/vat-return');
 const { getExecutiveSummary }                                  = require('./queries/executive');
+const dscrRoute                                                = require('./routes/dscr');
 
 const app        = express();
 const PORT       = parseInt(process.env.PORT, 10)             || 3001;
@@ -75,6 +76,9 @@ app.get('/api/config', (_req, res) => {
     pollIntervalMs: POLL_MS,
   });
 });
+
+// ── DSCR ───────────────────────────────────────────────────────────────────────
+app.use('/api/dscr', dscrRoute);
 
 // ── GET /api/health ────────────────────────────────────────────────────────────
 app.get('/api/health', (_req, res) => {

@@ -1,0 +1,438 @@
+{
+  "lastSync": "2026-07-05",
+  "mandatedCosts": {
+    "أبعاد الحديد": 2098460,
+    "وسام الفولاذ": 450185
+  },
+  "loans": [
+    {
+      "id": 1,
+      "name": "قرض راك الاماراتي",
+      "bank": "الإمارات (RAKBank Islamic)",
+      "company": "أبعاد الحديد",
+      "type": "شهري",
+      "principal": 1684988.2,
+      "payment": 47454.92,
+      "paid": 0,
+      "dueDate": "2025-11-01",
+      "notes": "مطابق لجدول الإطفاء الفعلي — محوّل من درهم بسعر 1.023",
+      "originalPrincipal": 1272755.21,
+      "financingType": "مرابحة",
+      "currency": "SAR",
+      "startDate": "2025-10-01",
+      "installmentsTotal": 35,
+      "endDate": "2028-08-01",
+      "schedule": [
+        {
+          "date": "2025-10-01",
+          "principal": 27037.81,
+          "profit": 20417.12
+        },
+        {
+          "date": "2025-11-01",
+          "principal": 26805.42,
+          "profit": 20649.5
+        },
+        {
+          "date": "2025-12-01",
+          "principal": 27901.55,
+          "profit": 19553.38
+        },
+        {
+          "date": "2026-01-01",
+          "principal": 27712.27,
+          "profit": 19742.65
+        },
+        {
+          "date": "2026-02-01",
+          "principal": 28171.64,
+          "profit": 19283.28
+        },
+        {
+          "date": "2026-03-01",
+          "principal": 30459.56,
+          "profit": 16995.36
+        },
+        {
+          "date": "2026-04-01",
+          "principal": 29143.53,
+          "profit": 18311.39
+        },
+        {
+          "date": "2026-05-01",
+          "principal": 30201.73,
+          "profit": 17253.19
+        },
+        {
+          "date": "2026-06-01",
+          "principal": 30127.27,
+          "profit": 17327.66
+        },
+        {
+          "date": "2026-07-01",
+          "principal": 31169.51,
+          "profit": 16285.41
+        },
+        {
+          "date": "2026-08-01",
+          "principal": 31143.34,
+          "profit": 16311.58
+        },
+        {
+          "date": "2026-09-01",
+          "principal": 31659.59,
+          "profit": 15795.33
+        },
+        {
+          "date": "2026-10-01",
+          "principal": 32676.98,
+          "profit": 14777.94
+        },
+        {
+          "date": "2026-11-01",
+          "principal": 32726.06,
+          "profit": 14728.87
+        },
+        {
+          "date": "2026-12-01",
+          "principal": 33726.16,
+          "profit": 13728.76
+        },
+        {
+          "date": "2027-01-01",
+          "principal": 33827.59,
+          "profit": 13627.33
+        },
+        {
+          "date": "2027-02-01",
+          "principal": 34388.33,
+          "profit": 13066.59
+        },
+        {
+          "date": "2027-03-01",
+          "principal": 36167.71,
+          "profit": 11287.21
+        },
+        {
+          "date": "2027-04-01",
+          "principal": 35557.89,
+          "profit": 11897.03
+        },
+        {
+          "date": "2027-05-01",
+          "principal": 36512.08,
+          "profit": 10942.85
+        },
+        {
+          "date": "2027-06-01",
+          "principal": 36752.55,
+          "profit": 10702.37
+        },
+        {
+          "date": "2027-07-01",
+          "principal": 37687.37,
+          "profit": 9767.55
+        },
+        {
+          "date": "2027-08-01",
+          "principal": 37986.51,
+          "profit": 9468.42
+        },
+        {
+          "date": "2027-09-01",
+          "principal": 38616.18,
+          "profit": 8838.74
+        },
+        {
+          "date": "2027-10-01",
+          "principal": 39520.77,
+          "profit": 7934.15
+        },
+        {
+          "date": "2027-11-01",
+          "principal": 39911.41,
+          "profit": 7543.51
+        },
+        {
+          "date": "2027-12-01",
+          "principal": 40795.0,
+          "profit": 6659.92
+        },
+        {
+          "date": "2028-01-01",
+          "principal": 41249.23,
+          "profit": 6205.69
+        },
+        {
+          "date": "2028-02-01",
+          "principal": 41933.0,
+          "profit": 5521.93
+        },
+        {
+          "date": "2028-03-01",
+          "principal": 42939.5,
+          "profit": 4515.42
+        },
+        {
+          "date": "2028-04-01",
+          "principal": 43339.88,
+          "profit": 4115.05
+        },
+        {
+          "date": "2028-05-01",
+          "principal": 44167.86,
+          "profit": 3287.06
+        },
+        {
+          "date": "2028-06-01",
+          "principal": 44790.44,
+          "profit": 2664.49
+        },
+        {
+          "date": "2028-07-01",
+          "principal": 45594.91,
+          "profit": 1860.02
+        },
+        {
+          "date": "2028-08-01",
+          "principal": 70354.56,
+          "profit": 1166.22
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "راجحي وسام الفولاذ",
+      "bank": "الراجحي",
+      "company": "وسام الفولاذ",
+      "type": "شهري",
+      "principal": 5133124,
+      "payment": 85552,
+      "paid": 171104.14,
+      "dueDate": "2026-07-25",
+      "notes": "وسام الفولاذ",
+      "originalPrincipal": 3383123,
+      "financingType": "مرابحة",
+      "currency": "SAR",
+      "startDate": "2026-06-25",
+      "installmentsTotal": 60,
+      "endDate": ""
+    },
+    {
+      "id": 3,
+      "name": "قرض رصيد الراجحي",
+      "bank": "الراجحي",
+      "company": "أبعاد الحديد",
+      "type": "شهري",
+      "principal": 526325.35,
+      "payment": 19494,
+      "paid": 175443,
+      "dueDate": "2026-07-14",
+      "notes": "ابعاد",
+      "originalPrincipal": 500000,
+      "financingType": "مرابحة",
+      "currency": "SAR",
+      "startDate": "2025-09-14",
+      "installmentsTotal": 26,
+      "endDate": ""
+    },
+    {
+      "id": 4,
+      "name": "أملاك شخصي",
+      "bank": "أملاك (حساب AA24022NQ3VM)",
+      "company": "أبعاد الحديد",
+      "type": "شهري",
+      "principal": 498149.52,
+      "payment": 12150.01,
+      "paid": 109350,
+      "dueDate": "2026-07-17",
+      "notes": "مطابَق مع تقرير ملّم الائتماني بتاريخ 2025/09/17",
+      "originalPrincipal": 485082.45,
+      "financingType": "تمويل شخصي",
+      "currency": "SAR",
+      "startDate": "",
+      "installmentsTotal": 0,
+      "endDate": ""
+    },
+    {
+      "id": 5,
+      "name": "رياض الفولاذ (1)",
+      "bank": "بنك الرياض",
+      "company": "وسام الفولاذ",
+      "type": "نصف سنوي",
+      "principal": 533149.38,
+      "payment": 533149.38,
+      "paid": 0,
+      "dueDate": "2026-10-05",
+      "notes": "وسام الفولاذ",
+      "originalPrincipal": 495000,
+      "financingType": "مرابحة",
+      "currency": "SAR",
+      "startDate": "",
+      "installmentsTotal": 0,
+      "endDate": ""
+    },
+    {
+      "id": 6,
+      "name": "قرض الرياض (1)",
+      "bank": "بنك الرياض",
+      "company": "أبعاد الحديد",
+      "type": "نصف سنوي",
+      "principal": 5306881.25,
+      "payment": 5306881.25,
+      "paid": 0,
+      "dueDate": "2026-09-25",
+      "notes": "ابعاد",
+      "originalPrincipal": 4950000,
+      "financingType": "مرابحة",
+      "currency": "SAR",
+      "startDate": "",
+      "installmentsTotal": 1,
+      "endDate": ""
+    },
+    {
+      "id": 7,
+      "name": "قرض أملاك",
+      "bank": "أملاك",
+      "company": "أبعاد الحديد",
+      "type": "ربع سنوي",
+      "principal": 3244496.52,
+      "payment": 295052.08,
+      "paid": 939114.57,
+      "dueDate": "2026-09-14",
+      "notes": "ابعاد",
+      "originalPrincipal": 2500000,
+      "financingType": "مرابحة",
+      "currency": "SAR",
+      "startDate": "2025-09-14",
+      "installmentsTotal": 12,
+      "endDate": ""
+    },
+    {
+      "id": 8,
+      "name": "رياض الفولاذ (2)",
+      "bank": "بنك الرياض",
+      "company": "وسام الفولاذ",
+      "type": "نصف سنوي",
+      "principal": 533362.5,
+      "payment": 533362.5,
+      "paid": 0,
+      "dueDate": "2026-08-24",
+      "notes": "وسام الفولاذ",
+      "originalPrincipal": 495000,
+      "financingType": "مرابحة",
+      "currency": "SAR",
+      "startDate": "",
+      "installmentsTotal": 1,
+      "endDate": ""
+    },
+    {
+      "id": 9,
+      "name": "قرض الرياض (2)",
+      "bank": "بنك الرياض",
+      "company": "أبعاد الحديد",
+      "type": "نصف سنوي",
+      "principal": 5127443.75,
+      "payment": 5127443.75,
+      "paid": 0,
+      "dueDate": "2026-07-12",
+      "notes": "ابعاد",
+      "originalPrincipal": 4950000,
+      "financingType": "مرابحة",
+      "currency": "SAR",
+      "startDate": "",
+      "installmentsTotal": 0,
+      "endDate": ""
+    },
+    {
+      "id": 10,
+      "name": "قرض الرياض (3)",
+      "bank": "بنك الرياض",
+      "company": "أبعاد الحديد",
+      "type": "نصف سنوي",
+      "principal": 5308875,
+      "payment": 5308875,
+      "paid": 0,
+      "dueDate": "2026-10-12",
+      "notes": "ابعاد",
+      "originalPrincipal": 4950000,
+      "financingType": "مرابحة",
+      "currency": "SAR",
+      "startDate": "",
+      "installmentsTotal": 1,
+      "endDate": ""
+    },
+    {
+      "id": 11,
+      "name": "رياض الفولاذ 3",
+      "bank": "الرياض",
+      "company": "وسام الفولاذ",
+      "type": "نصف سنوي",
+      "principal": 533362,
+      "payment": 533362,
+      "paid": 0,
+      "dueDate": "2026-07-20",
+      "notes": "",
+      "originalPrincipal": 495000,
+      "financingType": "مرابحة",
+      "currency": "SAR",
+      "startDate": "",
+      "installmentsTotal": 1,
+      "endDate": ""
+    },
+    {
+      "id": 12,
+      "name": "الراجحي تقسيط وسام",
+      "bank": "الراجحي",
+      "company": "وسام الفولاذ",
+      "type": "شهري",
+      "principal": 1057911.12,
+      "payment": 29386.42,
+      "paid": 58772.84,
+      "dueDate": "2026-07-15",
+      "notes": "",
+      "originalPrincipal": 750000,
+      "financingType": "مرابحة",
+      "currency": "SAR",
+      "startDate": "",
+      "installmentsTotal": 0,
+      "endDate": ""
+    },
+    {
+      "id": 13,
+      "name": "الراجحي تورق ابعاد",
+      "bank": "الراجحي",
+      "company": "أبعاد الحديد",
+      "type": "شهري",
+      "principal": 7031997.07,
+      "payment": 117199.95,
+      "paid": 351599.85,
+      "dueDate": "2026-07-15",
+      "notes": "",
+      "originalPrincipal": 4636342,
+      "financingType": "تورق",
+      "currency": "SAR",
+      "startDate": "",
+      "installmentsTotal": 0,
+      "endDate": ""
+    },
+    {
+      "id": 14,
+      "name": "تمويل تورق الراجحي وسام",
+      "bank": "الراجحي",
+      "company": "وسام الفولاذ",
+      "type": "ربع سنوي",
+      "principal": 576908.46,
+      "payment": 576908.46,
+      "paid": 0,
+      "dueDate": "2026-07-15",
+      "notes": "يسدد كامل",
+      "originalPrincipal": 560150,
+      "financingType": "تورق",
+      "currency": "SAR",
+      "startDate": "",
+      "installmentsTotal": 0,
+      "endDate": ""
+    }
+  ]
+}

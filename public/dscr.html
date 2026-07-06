@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>تغطية خدمة الدين (DSCR) — الخبير المالي عمر أبو دقن</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy:      #142446;
+    --navy2:     #1e3466;
+    --gold:      #C6A04A;
+    --gold-soft: #e7d29a;
+    --gold-bg:   #fdf9ee;
+    --ink:       #1a2233;
+    --muted:     #6b7891;
+    --line:      #e3e8f0;
+    --bg:        #f4f6fa;
+    --red:       #c0392b;
+    --red-bg:    #fbeaea;
+    --amber:     #d68910;
+    --amber-bg:  #fdf3e2;
+    --green:     #137333;
+    --green-bg:  #e9f7ef;
+    --shadow:    0 2px 14px rgba(20,36,70,.08);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: 'Tajawal','Cairo',sans-serif; background: var(--bg); color: var(--ink); }
+  .wrap { max-width: 1160px; margin: 0 auto; padding: 0 18px 60px; }
+
+  header {
+    background: linear-gradient(135deg, var(--navy), var(--navy2));
+    color: #fff; padding: 22px 26px;
+    display: flex; align-items: center; justify-content: space-between;
+    box-shadow: var(--shadow);
+  }
+  header h1 { font-family: 'Cairo'; font-weight: 800; font-size: 20px; margin: 0; }
+  header .sub { font-size: 12.5px; color: var(--gold-soft); font-weight: 500; margin-top: 4px; }
+  .updated { font-size: 12px; color: rgba(255,255,255,.75); }
+
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin: 24px 0; }
+  @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } }
+
+  .card {
+    background: #fff; border: 1px solid var(--line);
+    border-radius: 16px; padding: 22px 24px;
+    box-shadow: var(--shadow);
+  }
+  .card-title {
+    font-family: 'Cairo'; font-weight: 800; font-size: 15.5px;
+    color: var(--navy); margin: 0 0 18px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .card-title::before {
+    content: ""; width: 5px; height: 18px;
+    background: var(--gold); border-radius: 3px; flex-shrink: 0;
+  }
+
+  /* ── المؤشر الاقتصادي (الأبرز) ─────────────────── */
+  .dscr-block { text-align: center; margin-bottom: 6px; }
+  .dscr-label-text {
+    font-family: 'Cairo'; font-weight: 700; font-size: 11.5px;
+    letter-spacing: .04em; text-transform: uppercase;
+    color: var(--muted); margin-bottom: 4px;
+  }
+  .dscr-primary {
+    font-family: 'Cairo'; font-weight: 800; font-size: 52px;
+    line-height: 1; margin: 0;
+  }
+  .dscr-tag {
+    font-family: 'Cairo'; font-weight: 700; font-size: 12.5px;
+    padding: 4px 14px; border-radius: 20px;
+    display: inline-block; margin-top: 6px;
+  }
+
+  /* ── المؤشر المحاسبي (مرجعي) ──────────────────── */
+  .dscr-secondary-wrap {
+    display: flex; align-items: center; justify-content: center;
+    gap: 10px; margin: 14px 0 2px;
+    padding: 10px 14px; background: #f7f9fc;
+    border: 1px dashed var(--line); border-radius: 10px;
+  }
+  .dscr-secondary-label {
+    font-size: 12px; color: var(--muted); font-weight: 600; flex: 1;
+    font-family: 'Cairo';
+  }
+  .dscr-secondary-value {
+    font-family: 'Cairo'; font-weight: 800; font-size: 26px;
+  }
+  .dscr-secondary-tag {
+    font-family: 'Cairo'; font-weight: 700; font-size: 11px;
+    padding: 3px 10px; border-radius: 14px; white-space: nowrap;
+  }
+
+  .divider { border: none; border-top: 1px solid var(--line); margin: 18px 0 14px; }
+
+  .row {
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding: 8px 0; border-bottom: 1px dashed var(--line); font-size: 13px;
+  }
+  .row:last-child { border-bottom: none; }
+  .row .k { color: var(--muted); font-weight: 600; }
+  .row .v { font-weight: 800; color: var(--navy); font-variant-numeric: tabular-nums; }
+  .row .v.gap { color: var(--amber); }
+
+  /* ── ملاحظة الفجوة (داخل البطاقة) ────────────── */
+  .gap-note {
+    margin-top: 14px; padding: 10px 13px;
+    background: #fffbf0; border: 1px solid #f0dfa0;
+    border-radius: 8px; font-size: 11.5px; color: #7a5f1c;
+    line-height: 1.75;
+  }
+
+  /* ── ملاحظة عامة أسفل الشبكة ──────────────────── */
+  .full-note {
+    grid-column: 1 / -1;
+    background: var(--gold-bg); border: 1px solid var(--gold-soft);
+    border-radius: 10px; padding: 13px 17px;
+    font-size: 12.5px; color: #7a5f1c; line-height: 1.85;
+  }
+
+  .err { color: var(--red); font-size: 12.5px; text-align: center; padding: 20px; }
+  .loading { text-align: center; padding: 60px; color: var(--muted); font-family: 'Cairo'; font-weight: 700; }
+  footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 10px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>تغطية خدمة الدين (DSCR)</h1>
+    <div class="sub">الخبير المالي عمر أبو دقن — بيانات حيّة من MekSoft + سجل التمويلات</div>
+  </div>
+  <div class="updated" id="updatedAt">جارٍ التحميل...</div>
+</header>
+
+<div class="wrap">
+  <div class="grid" id="grid">
+    <div class="loading" style="grid-column:1/-1">جارٍ سحب البيانات من MekSoft...</div>
+  </div>
+  <footer>🔒 لا اعتماد قبل المطابقة — راجع الأرقام مقابل التقارير الرسمية دورياً</footer>
+</div>
+
+<script>
+function fmt(n) {
+  return (n === null || n === undefined || isNaN(+n))
+    ? '—' : Math.round(+n).toLocaleString('en-US');
+}
+
+function colorSet(dscr) {
+  if (dscr === null) return { c: 'var(--muted)', bg: '#eef1f7' };
+  if (dscr >= 1.5)  return { c: 'var(--green)',  bg: 'var(--green-bg)' };
+  if (dscr >= 1.0)  return { c: 'var(--amber)',  bg: 'var(--amber-bg)' };
+  return              { c: 'var(--red)',   bg: 'var(--red-bg)' };
+}
+
+function renderCard(co) {
+  if (co.error) {
+    return `<div class="card">
+      <div class="card-title">${co.label}</div>
+      <div class="err">تعذّر الاتصال بـ MekSoft: ${co.error}</div>
+    </div>`;
+  }
+
+  const eco  = colorSet(co.dscrEconomic);
+  const acc  = colorSet(co.dscrAccounting);
+  const eVal = co.dscrEconomic  !== null ? co.dscrEconomic.toFixed(2)  + '×' : '—';
+  const aVal = co.dscrAccounting !== null ? co.dscrAccounting.toFixed(2) + '×' : '—';
+
+  return `
+  <div class="card">
+    <div class="card-title">${co.label}</div>
+
+    <!-- المؤشر الاقتصادي — الأبرز والأول -->
+    <div class="dscr-block">
+      <div class="dscr-label-text">DSCR المستحق اقتصادياً</div>
+      <div class="dscr-primary" style="color:${eco.c}">${eVal}</div>
+      <div class="dscr-tag" style="color:${eco.c};background:${eco.bg}">${co.dscrEconomicLabel}</div>
+    </div>
+
+    <!-- المؤشر المحاسبي — مرجعي -->
+    <div class="dscr-secondary-wrap">
+      <span class="dscr-secondary-label">DSCR المسجَّل محاسبياً (MekSoft)</span>
+      <span class="dscr-secondary-value" style="color:${acc.c}">${aVal}</span>
+      <span class="dscr-secondary-tag" style="color:${acc.c};background:${acc.bg}">${co.dscrAccountingLabel}</span>
+    </div>
+
+    <hr class="divider">
+
+    <div class="row">
+      <span class="k">الفترة</span>
+      <span class="v">${co.period}</span>
+    </div>
+    <div class="row">
+      <span class="k">الإيرادات</span>
+      <span class="v">${fmt(co.revenue)} ر.س</span>
+    </div>
+    <div class="row">
+      <span class="k">الربح التشغيلي (قبل التمويل)</span>
+      <span class="v">${fmt(co.operatingProfit)} ر.س</span>
+    </div>
+    <div class="row">
+      <span class="k">تكلفة التمويل — مستحق اقتصادياً</span>
+      <span class="v">${fmt(co.economicFinancingCost)} ر.س</span>
+    </div>
+    <div class="row">
+      <span class="k">تكلفة التمويل — مسجَّل في MekSoft</span>
+      <span class="v" style="color:var(--muted)">${fmt(co.accountingFinancingCost)} ر.س</span>
+    </div>
+    <div class="row">
+      <span class="k">فوائد غير مقيَّدة بعد</span>
+      <span class="v gap">${fmt(co.unrecordedGap)} ر.س</span>
+    </div>
+    <div class="row">
+      <span class="k">الفائدة المتبقية (عمر التسهيلات)</span>
+      <span class="v" style="color:var(--muted)">${fmt(co.lifetimeRemainingInterest)} ر.س</span>
+    </div>
+    <div class="row">
+      <span class="k">عدد التسهيلات النشطة</span>
+      <span class="v">${co.loansCount}</span>
+    </div>
+
+    <div class="gap-note">
+      <b>الفرق بين المؤشرَين</b> = فوائد مستحقة اقتصادياً على تسهيلات نصف سنوية/ربع سنوية
+      لم يحن موعد قيدها المحاسبي بعد. راجع <b>"الفائدة المتبقية على عمر التسهيلات"</b>
+      في سجل التمويلات لتفاصيل كل تسهيل.
+    </div>
+  </div>`;
+}
+
+async function load() {
+  try {
+    const res  = await fetch('/api/dscr');
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+
+    document.getElementById('updatedAt').textContent =
+      'آخر تحديث: ' + new Date(data.generatedAt).toLocaleString('ar-SA');
+
+    const grid = document.getElementById('grid');
+    const cards = Object.values(data.companies).map(renderCard).join('');
+    const note = `
+      <div class="full-note">
+        <b>كيف نقرأ هذين المؤشرَين؟</b><br>
+        • <b>DSCR المستحق اقتصادياً</b>: يُحسب على أساس تكلفة التمويل الفعلية لكل التسهيلات وفق جداول إطفائها
+          (شهري + نصف سنوي + ربع سنوي) — هذا هو الأصح لأي قرار استراتيجي.<br>
+        • <b>DSCR المسجَّل محاسبياً</b>: يعكس ما دُفع وقُيِّد فعلاً في MekSoft حتى الآن — مفيد للمطابقة مع
+          القوائم المالية الرسمية وسيرتفع تلقائياً عند تسجيل دفعات التسهيلات النصف سنوية.<br>
+        • DSCR ≥ 1.5 = تغطية قوية &nbsp;|&nbsp; 1.0–1.5 = كافية لكن ضيقة &nbsp;|&nbsp;
+          &lt; 1.0 = خطر — التمويل يلتهم الربح التشغيلي أو أكثر.
+      </div>`;
+    grid.innerHTML = cards + note;
+  } catch (e) {
+    document.getElementById('grid').innerHTML =
+      `<div class="err" style="grid-column:1/-1">تعذّر تحميل البيانات: ${e.message}</div>`;
+  }
+}
+
+load();
+</script>
+</body>
+</html>
