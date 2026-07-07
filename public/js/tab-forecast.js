@@ -35,36 +35,35 @@ const FC_DEFAULTS = {
   },
 };
 
-// ── Default loan schedules per company ───────────────────────────────────────
-const FC_LOAN_DEFAULTS = {
-  MekSoftDb1: [
-    { name:'قرض الرياض (1)',    installment:5306881, frequency:'semi-annual', nextDue:'2026-03-12' },
-    { name:'قرض الرياض (2)',    installment:5308875, frequency:'semi-annual', nextDue:'2026-04-12' },
-    { name:'قرض الرياض (3)',    installment:5308875, frequency:'semi-annual', nextDue:'2026-05-18' },
-    { name:'تمويل الراجحي',     installment:2727441, frequency:'semi-annual', nextDue:'2026-03-24' },
-    { name:'قرض أملاك',         installment:314323,  frequency:'quarterly',   nextDue:'2026-03-14' },
-    { name:'قرض راك الإماراتي', installment:47316,   frequency:'monthly',     nextDue:'2025-11-01' },
-    { name:'نقاط بيع (1)',       installment:34292,   frequency:'monthly',     nextDue:'2026-02-24' },
-    { name:'نقاط بيع (2)',       installment:33965,   frequency:'monthly',     nextDue:'2026-02-24' },
-    { name:'رصيد الراجحي',       installment:19494,   frequency:'monthly',     nextDue:'2026-03-14' },
-    { name:'أملاك شخصي',         installment:12150,   frequency:'monthly',     nextDue:'2026-03-17' },
-    { name:'إمكان شخصي',         installment:8525,    frequency:'monthly',     nextDue:'2026-03-14' },
-  ],
-  MekSoftDb2: [
-    // ح.86 — قرض راجحي (أُبرم 09-04-2026، حلّ محل القرض القديم 522,807)
-    { name:'قرض الراجحي (وسام)',       installment:56385,  frequency:'monthly',     nextDue:'2026-07-01' },
-    // ح.325 — تمويل بيت علي (صُرف 11-03-2026)
-    { name:'تمويل بيت علي (وسام)',     installment:29131,  frequency:'monthly',     nextDue:'2026-07-01' },
-    // ح.85 — تسهيل الرياض المتجدد؛ سداد نصف سنوي صافٍ
-    { name:'قرض الرياض (وسام)',         installment:533149, frequency:'semi-annual', nextDue:'2026-08-19' },
-    // ح.326 — تمويل راجحي أعمال شهري (صُرف 01-04-2026)
-    { name:'راجحي أعمال (وسام)',       installment:20833,  frequency:'monthly',     nextDue:'2026-07-01' },
-    // ح.327 — تورق راجحي (صُرف 19-04-2026) — ⚠ قسط مستنتج 562,155÷36، يُؤكَّد من العقد
-    { name:'تورق الراجحي (وسام) ⚠',   installment:15615,  frequency:'monthly',     nextDue:'2026-07-01' },
-    // ح.104 — تقسيط مركبة دينا (صُرف 22-01-2026؛ 5 دفعات مرصودة)
-    { name:'قرض الدينا (وسام)',         installment:2047,   frequency:'monthly',     nextDue:'2026-07-01' },
-  ],
-};
+// ── Loan schedule: sourced LIVE from the financing register (سجل التمويلات) ──
+// Single source of truth = server/data/financing-data.json via /api/financing
+// (same file DSCR reads). No local editing here — manage loans in the register tab.
+const FC_COMPANY_KEY = { MekSoftDb1: 'أبعاد الحديد', MekSoftDb2: 'وسام الفولاذ' };
+const FC_TYPE_FREQ    = { 'شهري': 'monthly', 'ربع سنوي': 'quarterly', 'نصف سنوي': 'semi-annual' };
+
+let _fcRegisterLoans = [];   // cached, already filtered+mapped for the active company
+
+function _fcMapRegisterLoan(l) {
+  return {
+    name:        l.name || '',
+    installment: +l.payment || 0,
+    frequency:   FC_TYPE_FREQ[l.type] || 'monthly',
+    nextDue:     l.dueDate || '',
+    // Real bank amortization schedule (when available) overrides the flat
+    // installment/frequency roll-forward — more accurate, irregular amounts.
+    schedule:    Array.isArray(l.schedule) && l.schedule.length ? l.schedule : null,
+  };
+}
+
+async function _fcLoadRegisterLoans(db) {
+  try {
+    const res = await fetch('/api/financing');
+    if (!res.ok) return [];
+    const data = await res.json();
+    const key  = FC_COMPANY_KEY[db];
+    return (data.loans || []).filter(l => l.company === key).map(_fcMapRegisterLoan);
+  } catch (e) { return []; }
+}
 
 // ── Formatting ────────────────────────────────────────────────────────────────
 const _FC_FMT0 = new Intl.NumberFormat('ar-SA', { maximumFractionDigits: 0 });
@@ -106,21 +105,6 @@ function _padArr(arr, n) {
 }
 function _fcGetParams() { return _fcLoadParams(_fcDb); }
 
-// ── Loan schedule: localStorage per company ───────────────────────────────────
-function _fcLoanDefaults(db) {
-  return JSON.parse(JSON.stringify(FC_LOAN_DEFAULTS[db] || []));
-}
-function _fcLoadLoans(db) {
-  try {
-    const raw = localStorage.getItem('fc_loans_' + db);
-    if (raw) return JSON.parse(raw);
-  } catch (e) { /* ignore */ }
-  return _fcLoanDefaults(db);
-}
-function _fcSaveLoans(db, loans) {
-  try { localStorage.setItem('fc_loans_' + db, JSON.stringify(loans || [])); } catch (e) { /* ignore */ }
-}
-
 // ── Loan roll-forward engine ──────────────────────────────────────────────────
 // Advances dueDate by frequency until first occurrence >= forecastStart
 function _fcRollForward(dueDateStr, freq, forecastStart) {
@@ -143,6 +127,19 @@ function _fcFinancingForWeeks(loans, forecastStart, H) {
   if (!loans || !loans.length || !forecastStart) return arr;
   const start = new Date(forecastStart + 'T00:00:00');
   for (const loan of loans) {
+    // Real bank amortization schedule (from the financing register) — use the
+    // actual dated installments instead of assuming a flat repeating amount.
+    if (loan.schedule) {
+      for (const row of loan.schedule) {
+        if (!row.date) continue;
+        const d = new Date(row.date + 'T00:00:00');
+        const dayOffset = Math.round((d - start) / (24 * 3600 * 1000));
+        const weekIdx   = Math.floor(dayOffset / 7);
+        if (weekIdx >= 0 && weekIdx < H) arr[weekIdx] += (+row.principal || 0) + (+row.profit || 0);
+      }
+      continue;
+    }
+
     const inst = Math.abs(+(loan.installment) || 0);
     if (!inst || !loan.nextDue || !loan.frequency) continue;
     let due = _fcRollForward(loan.nextDue, loan.frequency, forecastStart);
@@ -277,9 +274,13 @@ async function _fcLoad() {
   const to   = document.getElementById('fc-to')?.value   || new Date().toISOString().slice(0, 10);
   try {
     const url  = `/api/forecast?db=${encodeURIComponent(_fcDb)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
-    const data = await fetch(url).then(r => r.json());
+    const [data, regLoans] = await Promise.all([
+      fetch(url).then(r => r.json()),
+      _fcLoadRegisterLoans(_fcDb),
+    ]);
     if (data.error) throw new Error(data.message || data.error);
-    _fcBackbone   = data;
+    _fcBackbone      = data;
+    _fcRegisterLoans = regLoans;
     _fcCountdown  = FC_REFRESH_SEC;
     _fcTableBuilt = false;   // backbone changed → rebuild table
     _fcComputeAndRender();
@@ -344,7 +345,7 @@ function _fcEngine(backbone, p, financingArr) {
 function _fcComputeAndRender() {
   if (!_fcBackbone) return;
   const p    = _fcGetParams();
-  const loans = _fcLoadLoans(_fcDb);
+  const loans = _fcRegisterLoans || [];
   const forecastStart = document.getElementById('fc-to')?.value || new Date().toISOString().slice(0, 10);
   const financingArr  = _fcFinancingForWeeks(loans, forecastStart, +p.horizon || 13);
   const rows = _fcEngine(_fcBackbone.backbone, p, financingArr);
@@ -476,7 +477,7 @@ function _fcSVG(rows, safetyLine) {
 function _fcRenderAssumptions(p, loans) {
   const el = document.getElementById('fc-assump');
   if (!el) return;
-  if (!loans) loans = _fcLoadLoans(_fcDb);
+  if (!loans) loans = _fcRegisterLoans || [];
 
   const inp = (id, val, min, max, step=1, extra='') =>
     `<input id="fca-${id}" type="number" class="fc-ainp" value="${+val||0}" min="${min}" max="${max}" step="${step}" ${extra}>`;
@@ -487,7 +488,8 @@ function _fcRenderAssumptions(p, loans) {
     return `<select id="fca-${id}" class="fc-ainp" style="width:56px">${opts}</select>`;
   };
   const h13     = p.horizon === 13 || +p.horizon === 13;
-  const loanRows = loans.map((l, i) => _fcLoanRowHtml(l, i)).join('');
+  const loanRows = loans.map(l => _fcLoanRowHtmlReadonly(l)).join('')
+    || `<tr><td colspan="4" style="text-align:center;color:#4a6a8a;padding:14px">لا توجد تسهيلات مسجَّلة لهذه الشركة في سجل التمويلات</td></tr>`;
 
   el.innerHTML = `
   <details id="fc-assump-details" class="fc-assump-wrap" open>
@@ -523,7 +525,7 @@ function _fcRenderAssumptions(p, loans) {
 
       <div class="fc-loans-section">
         <div class="fc-assump-group-title" style="margin-top:14px;border-top:1px solid #0d1e2e;padding-top:10px">
-          🏦 جدول التمويلات — صفّ «خدمة التمويل» يُحسب تلقائياً من هذا الجدول أسبوعياً
+          🏦 جدول التمويلات — صفّ «خدمة التمويل» يُحسب تلقائياً من سجل التمويلات (حيّ)
         </div>
         <div class="fc-loans-scroll">
           <table class="fc-loans-tbl" id="fc-loans-tbl">
@@ -532,12 +534,14 @@ function _fcRenderAssumptions(p, loans) {
               <th>القسط (ر.س)</th>
               <th>الدورية</th>
               <th>آخر استحقاق مسجّل</th>
-              <th></th>
             </tr></thead>
             <tbody id="fc-loans-tbody">${loanRows}</tbody>
           </table>
         </div>
-        <button id="fc-add-loan-btn" class="fc-btn" style="margin-top:6px;font-size:.79rem">+ إضافة قرض / تمويل</button>
+        <div class="fc-loans-note">
+          🔗 هذا الجدول للعرض فقط ويُقرأ حيّاً من <a href="/financing.html" target="_blank" rel="noopener">سجل التمويلات</a> —
+          أي تعديل (قسط، تاريخ استحقاق، إضافة/حذف تسهيل) يتم هناك وينعكس هنا تلقائياً.
+        </div>
       </div>
 
       <div class="fc-safety-row">
@@ -558,12 +562,8 @@ function _fcRenderAssumptions(p, loans) {
   document.getElementById('fc-save-btn')?.addEventListener('click', _fcSaveAndRecompute);
   document.getElementById('fca-h13')?.addEventListener('click', () => _fcSetHorizon(13));
   document.getElementById('fca-h26')?.addEventListener('click', () => _fcSetHorizon(26));
-  document.getElementById('fc-add-loan-btn')?.addEventListener('click', _fcAddLoanRow);
-  document.querySelectorAll('#fc-loans-tbody .fc-remove-loan').forEach(btn => {
-    btn.addEventListener('click', () => btn.closest('tr')?.remove());
-  });
-  // Auto-save on Enter in any scalar assumption input
-  el.querySelectorAll('.fc-ainp:not(.fc-loan-name):not(.fc-loan-inst):not(.fc-loan-due)').forEach(inp => {
+  // Auto-save on Enter in any assumption input
+  el.querySelectorAll('.fc-ainp').forEach(inp => {
     inp.addEventListener('keydown', e => { if (e.key === 'Enter') _fcSaveAndRecompute(); });
   });
 }
@@ -600,9 +600,8 @@ function _fcReadAssumptions() {
 
 function _fcSaveAndRecompute() {
   const p     = _fcReadAssumptions();
-  const loans = _fcReadLoans() || _fcLoadLoans(_fcDb);
+  const loans = _fcRegisterLoans || [];
   _fcSaveParams(_fcDb, p);
-  _fcSaveLoans(_fcDb, loans);
   _fcTableBuilt = false;
   if (_fcBackbone) {
     const forecastStart = document.getElementById('fc-to')?.value || new Date().toISOString().slice(0, 10);
@@ -703,7 +702,7 @@ function _fcWireTableInputs(rows, p) {
       // Recompute without rebuilding table — just update computed cells
       if (_fcBackbone) {
         const forecastStart = document.getElementById('fc-to')?.value || new Date().toISOString().slice(0, 10);
-        const financingArr  = _fcFinancingForWeeks(_fcLoadLoans(_fcDb), forecastStart, +cp.horizon || 13);
+        const financingArr  = _fcFinancingForWeeks(_fcRegisterLoans || [], forecastStart, +cp.horizon || 13);
         const newRows = _fcEngine(_fcBackbone.backbone, cp, financingArr);
         _fcUpdateComputedCells(newRows, cp);
       }
@@ -844,43 +843,18 @@ function _fcRenderExplain(p) {
   </details>`;
 }
 
-// ── Loan table helpers ────────────────────────────────────────────────────────
-function _fcLoanRowHtml(l, idx) {
-  const freqOpts = [
-    ['monthly',     'شهري'],
-    ['quarterly',   'ربع سنوي'],
-    ['semi-annual', 'نصف سنوي'],
-  ].map(([v, label]) =>
-    `<option value="${v}"${l.frequency === v ? ' selected' : ''}>${label}</option>`
-  ).join('');
-  const name = (l.name || '').replace(/"/g, '&quot;');
-  return `<tr data-loan-idx="${idx}">
-    <td><input type="text"   class="fc-ainp fc-loan-name" value="${name}" style="width:160px" placeholder="اسم القرض"></td>
-    <td><input type="number" class="fc-ainp fc-loan-inst" value="${l.installment||0}" min="0" step="1000" style="width:90px"></td>
-    <td><select class="fc-ainp fc-loan-freq" style="width:110px">${freqOpts}</select></td>
-    <td><input type="date"   class="fc-ainp fc-loan-due"  value="${l.nextDue||''}" style="width:130px"></td>
-    <td><button class="fc-btn fc-remove-loan" style="color:#da4a4a;padding:2px 8px;font-size:.75rem">✕</button></td>
+// ── Loan table (read-only — sourced from the financing register) ─────────────
+function _fcLoanRowHtmlReadonly(l) {
+  const freqLabel = { monthly:'شهري', quarterly:'ربع سنوي', 'semi-annual':'نصف سنوي' }[l.frequency] || l.frequency;
+  const schedTag  = l.schedule
+    ? ` <span style="color:#4ada8e;font-size:.7rem" title="جدول إطفاء فعلي من البنك — يُستخدم بدل الدورية الثابتة">📅 جدول فعلي</span>`
+    : '';
+  return `<tr>
+    <td>${esc(l.name)}${schedTag}</td>
+    <td>${fcFmt(l.installment)}</td>
+    <td>${esc(freqLabel)}</td>
+    <td>${esc(l.nextDue || '—')}</td>
   </tr>`;
-}
-
-function _fcAddLoanRow() {
-  const tbody = document.getElementById('fc-loans-tbody');
-  if (!tbody) return;
-  const loan = { name:'', installment:0, frequency:'monthly', nextDue: new Date().toISOString().slice(0, 10) };
-  tbody.insertAdjacentHTML('beforeend', _fcLoanRowHtml(loan, tbody.rows.length));
-  const tr = tbody.lastElementChild;
-  tr?.querySelector('.fc-remove-loan')?.addEventListener('click', () => tr.remove());
-}
-
-function _fcReadLoans() {
-  const tbody = document.getElementById('fc-loans-tbody');
-  if (!tbody) return null;
-  return [...tbody.querySelectorAll('tr')].map(tr => ({
-    name:        tr.querySelector('.fc-loan-name')?.value || '',
-    installment: +(tr.querySelector('.fc-loan-inst')?.value) || 0,
-    frequency:   tr.querySelector('.fc-loan-freq')?.value  || 'monthly',
-    nextDue:     tr.querySelector('.fc-loan-due')?.value   || '',
-  })).filter(l => l.nextDue);
 }
 
 // ── CSS ───────────────────────────────────────────────────────────────────────
@@ -993,6 +967,8 @@ function _fcInjectCSS() {
     border-bottom:2px solid #1e3a5f; text-align:right; font-weight:600; font-size:.77rem; }
   .fc-loans-tbl td  { padding:3px 6px; border-bottom:1px solid #0d1e2e; }
   .fc-loans-tbl tr:hover td { background:#091828; }
+  .fc-loans-note    { font-size:.76rem; color:#5a7a9a; margin-top:6px; line-height:1.6; }
+  .fc-loans-note a  { color:#5baef0; }
 
   .fc-footer { padding:14px 18px; color:#3a5a7a; font-size:.75rem; border-top:1px solid #0d1e2e; margin-top:20px; }
   `;
