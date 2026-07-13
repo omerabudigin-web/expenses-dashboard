@@ -1,5 +1,6 @@
 ﻿function renderTab(name) {
   if      (name === 'executive') { renderExecutiveTab(); return; }
+  if      (name === 'health')    { renderHealthTab(); return; }
   if      (name === 'summary')  renderSummary();
   else if (name === 'monthly')  renderMonthlyTab();
   else if (name === 'accounts') renderAccountsTab();

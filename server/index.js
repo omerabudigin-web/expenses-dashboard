@@ -33,6 +33,7 @@ const { getInventoryAging }                                    = require('./quer
 const { getItemProfitability }                                 = require('./queries/item-profitability');
 const { getARCollection }                                      = require('./queries/ar-collection');
 const { getIntercoRecon }                                      = require('./queries/interco-recon');
+const { getDataIntegrityCheck }                                = require('./queries/data-integrity');
 const { getVatReturn }                                         = require('./queries/vat-return');
 const { getExecutiveSummary }                                  = require('./queries/executive');
 const dscrRoute                                                = require('./routes/dscr');
@@ -865,6 +866,18 @@ app.get('/api/interco-recon', async (req, res) => {
     res.json(data);
   } catch (err) {
     console.error('[api/interco-recon]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /api/data-integrity?db= — فحص توازن ميزان المراجعة الكلي (كل التاريخ) ──
+app.get('/api/data-integrity', async (req, res) => {
+  const dbName = resolveDb(req.query);
+  try {
+    const data = await getDataIntegrityCheck(dbName);
+    res.json(data);
+  } catch (err) {
+    console.error('[api/data-integrity]', err.message);
     res.status(500).json({ error: err.message });
   }
 });
