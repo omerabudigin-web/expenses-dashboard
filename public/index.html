@@ -934,10 +934,12 @@
       <option value="ALL">جميع الفروع</option>
     </select>
 
-    <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:.82rem;color:#7090b0">
-      <input type="checkbox" id="is-compare" style="accent-color:#5baef0;cursor:pointer">
-      مقارنة بالعام الماضي
-    </label>
+    <label>مقارنة:</label>
+    <select id="is-cmp-mode" style="background:#0f2035;border:1px solid #1e3a5f;color:#c8d8e8;padding:6px 10px;border-radius:6px;font-size:.82rem">
+      <option value="">بدون مقارنة</option>
+      <option value="prevyear">نفس الفترة — العام السابق</option>
+      <option value="prevperiod">الفترة السابقة مباشرة (شهر سابق / ربع سابق)</option>
+    </select>
 
     <button class="btn" id="is-run">عرض القائمة</button>
     <button class="btn sm" id="is-export-excel" style="background:#0a3a1a;color:#80e0a0">Excel ⬇</button>

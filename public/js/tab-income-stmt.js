@@ -48,6 +48,33 @@ function _isLastDay(ym) {
   return `${ym}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
 }
 
+// ── مقارنة الفترات: نفس الفترة العام السابق، أو الفترة السابقة مباشرة ─────────
+// (شهر واحد → الشهر السابق له · ثلاثة أشهر (ربع) → الربع السابق · وهكذا)
+function _isShiftYM(ym, delta) {
+  const [y, m] = ym.split('-').map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+function _isMonthsBetween(fromYM, toYM) {
+  const [fy, fm] = fromYM.split('-').map(Number);
+  const [ty, tm] = toYM.split('-').map(Number);
+  return (ty - fy) * 12 + (tm - fm) + 1;
+}
+function _isCmpRange(fromYM, toYM, mode) {
+  if (!fromYM || !toYM) return { prevFromYM: '', prevToYM: '' };
+  if (mode === 'prevperiod') {
+    const len       = _isMonthsBetween(fromYM, toYM);
+    const prevToYM  = _isShiftYM(fromYM, -1);
+    const prevFromYM = _isShiftYM(prevToYM, -(len - 1));
+    return { prevFromYM, prevToYM };
+  }
+  // الوضع الافتراضي: نفس الأشهر، العام السابق
+  return { prevFromYM: _isShiftYM(fromYM, -12), prevToYM: _isShiftYM(toYM, -12) };
+}
+function _isCmpModeLabel(mode) {
+  return mode === 'prevperiod' ? 'الفترة السابقة مباشرة' : 'نفس الفترة — العام السابق';
+}
+
 function initIncomeStatement() {
   if (_isInited) return;
   _isInited = true;
@@ -87,8 +114,8 @@ function initIncomeStatement() {
   document.getElementById('is-print').addEventListener('click', () => window.print());
   document.getElementById('is-search').addEventListener('input', _renderISRows);
   document.getElementById('is-level').addEventListener('change', _isResetData);
-  const cmpCb = document.getElementById('is-compare');
-  if (cmpCb) cmpCb.addEventListener('change', () => { _isCmpData = null; if (_isData) fetchIncomeStatement(); });
+  const cmpSel = document.getElementById('is-cmp-mode');
+  if (cmpSel) cmpSel.addEventListener('change', () => { _isCmpData = null; if (_isData) fetchIncomeStatement(); });
   const bcBack = document.getElementById('is-bc-back');
   if (bcBack) bcBack.addEventListener('click', () => { _isRootFilter = null; _isUpdateBreadcrumb(); fetchIncomeStatement(); });
 
@@ -165,14 +192,14 @@ async function fetchIncomeStatement() {
   const params = new URLSearchParams({ db, from, to, level, branch });
   if (_isRootFilter) params.set('rootCode', _isRootFilter.code);
 
-  // Comparison period: same month range, previous year
-  const prevFromYM = `${+fromYM.substring(0, 4) - 1}${fromYM.substring(4)}`;
-  const prevToYM   = `${+toYM.substring(0, 4)   - 1}${toYM.substring(4)}`;
+  // Comparison period — حسب الوضع المختار (نفس فترة العام السابق / الفترة السابقة مباشرة)
+  const cmpMode = document.getElementById('is-cmp-mode')?.value || '';
+  const wantCmp = !!cmpMode;
+  const { prevFromYM, prevToYM } = _isCmpRange(fromYM, toYM, cmpMode);
   const prevFrom   = prevFromYM + '-01';
   const prevTo     = _isLastDay(prevToYM);
   const cmpParams  = new URLSearchParams({ db, from: prevFrom, to: prevTo, level, branch });
   if (_isRootFilter) cmpParams.set('rootCode', _isRootFilter.code);
-  const wantCmp = !!(document.getElementById('is-compare')?.checked);
 
   const loadEl   = document.getElementById('is-loading');
   const statusEl = document.getElementById('is-status');
@@ -182,7 +209,7 @@ async function fetchIncomeStatement() {
 
   const labelEl = document.getElementById('is-period-label');
   if (labelEl) labelEl.textContent = wantCmp
-    ? `${fromYM} — ${toYM}  |  مقارنة: ${prevFromYM} — ${prevToYM}`
+    ? `${fromYM} — ${toYM}  |  مقارنة (${_isCmpModeLabel(cmpMode)}): ${prevFromYM} — ${prevToYM}`
     : `${fromYM} — ${toYM}`;
 
   try {
@@ -462,15 +489,15 @@ function _renderISRows() {
   if (countEl) countEl.textContent = `${rows.length} حساب`;
 
   // Comparison state
-  const cmp    = !!(document.getElementById('is-compare')?.checked && _isCmpData);
-  const cmpMap = cmp ? new Map(_isCmpData.map(r => [r.code, r.net])) : null;
-  const C      = cmp ? 7 : 5;   // total column count
+  const cmpMode = document.getElementById('is-cmp-mode')?.value || '';
+  const cmp     = !!(cmpMode && _isCmpData);
+  const cmpMap  = cmp ? new Map(_isCmpData.map(r => [r.code, r.net])) : null;
+  const C       = cmp ? 7 : 5;   // total column count
 
   // Comparison period label for thead
   const fromYM    = document.getElementById('is-from').value || '';
   const toYM      = document.getElementById('is-to').value   || '';
-  const prevFromYM = fromYM ? `${+fromYM.substring(0,4)-1}${fromYM.substring(4)}` : '';
-  const prevToYM   = toYM   ? `${+toYM.substring(0,4)-1}${toYM.substring(4)}`     : '';
+  const { prevFromYM, prevToYM } = _isCmpRange(fromYM, toYM, cmpMode);
 
   // Rebuild thead to reflect comparison column count
   if (thead) {
@@ -482,7 +509,7 @@ function _renderISRows() {
         <th rowspan="2" class="num" style="min-width:120px">الصافي</th>
         ${cmp ? `
           <th rowspan="2" class="num" style="min-width:120px;background:#0b1f3a;color:#6a9acb">
-            المقارنة<br><small style="font-weight:400;font-size:.7rem;color:#4a7aaa">${esc(prevFromYM)}–${esc(prevToYM)}</small>
+            ${esc(_isCmpModeLabel(cmpMode))}<br><small style="font-weight:400;font-size:.7rem;color:#4a7aaa">${esc(prevFromYM)}–${esc(prevToYM)}</small>
           </th>
           <th rowspan="2" class="num" style="min-width:80px;background:#0b1f3a;color:#6a9acb">التغيير&nbsp;%</th>
         ` : ''}
@@ -721,14 +748,14 @@ async function exportISExcel() {
   if (!_isData || !_isData.length) return;
   if (typeof ExcelJS === 'undefined') { alert('مكتبة ExcelJS لم تُحمَّل بعد، جرب تحديث الصفحة'); return; }
 
-  const fromYM     = document.getElementById('is-from').value || '';
-  const toYM       = document.getElementById('is-to').value   || '';
-  const prevFromYM = fromYM ? `${+fromYM.substring(0,4)-1}${fromYM.substring(4)}` : '';
-  const prevToYM   = toYM   ? `${+toYM.substring(0,4)-1}${toYM.substring(4)}`     : '';
+  const fromYM  = document.getElementById('is-from').value || '';
+  const toYM    = document.getElementById('is-to').value   || '';
+  const cmpMode = document.getElementById('is-cmp-mode')?.value || '';
+  const { prevFromYM, prevToYM } = _isCmpRange(fromYM, toYM, cmpMode);
   const lvlTxt  = ([...document.getElementById('is-level').options].find(o=>o.selected)||{}).textContent || '';
   const brTxt   = ([...document.getElementById('is-branch').options].find(o=>o.selected)||{}).textContent || 'جميع الفروع';
   const company = State.get('companyName') || '';
-  const withCmp = !!(document.getElementById('is-compare')?.checked && _isCmpData);
+  const withCmp = !!(cmpMode && _isCmpData);
   const cmpMap  = withCmp ? new Map(_isCmpData.map(r => [r.code, r.net])) : null;
   const genDate = new Date().toLocaleDateString('ar-SA', {year:'numeric',month:'long',day:'numeric'});
 
@@ -869,7 +896,7 @@ async function exportISExcel() {
     // ── Title block ──────────────────────────────────────────────────────────
     addTitle(company || 'قائمة الدخل الشامل', 14, CLR.white, CLR.navyDark);
     addTitle('قائمة الدخل الشامل', 12, CLR.white, CLR.navy);
-    addTitle(`الفترة: ${fromYM} إلى ${toYM}${withCmp?`  |  مقارنة: ${prevFromYM} إلى ${prevToYM}`:''} | ${lvlTxt} | الفرع: ${brTxt}`, 9.5, 'FFAACCE8', CLR.navyDark);
+    addTitle(`الفترة: ${fromYM} إلى ${toYM}${withCmp?`  |  مقارنة (${_isCmpModeLabel(cmpMode)}): ${prevFromYM} إلى ${prevToYM}`:''} | ${lvlTxt} | الفرع: ${brTxt}`, 9.5, 'FFAACCE8', CLR.navyDark);
     addTitle(`المبالغ بالريال السعودي  —  أُنشئ: ${genDate}`, 8.5, CLR.textLight, CLR.navyDark);
     addSpacer(4);
 
@@ -1010,10 +1037,10 @@ function exportISHTML() {
   const brTxt  = ([...document.getElementById('is-branch').options].find(o=>o.selected)||{}).textContent || 'جميع الفروع';
   const db     = State.get('activeDb') || '';
 
-  const withCmp    = !!(document.getElementById('is-compare')?.checked && _isCmpData);
-  const cmpMap     = withCmp ? new Map(_isCmpData.map(r => [r.code, r.net])) : null;
-  const prevFromYM = fromYM ? `${+fromYM.substring(0,4)-1}${fromYM.substring(4)}` : '';
-  const prevToYM   = toYM   ? `${+toYM.substring(0,4)-1}${toYM.substring(4)}`     : '';
+  const cmpMode = document.getElementById('is-cmp-mode')?.value || '';
+  const withCmp = !!(cmpMode && _isCmpData);
+  const cmpMap  = withCmp ? new Map(_isCmpData.map(r => [r.code, r.net])) : null;
+  const { prevFromYM, prevToYM } = _isCmpRange(fromYM, toYM, cmpMode);
 
   const revRows     = _isData.filter(r => r.plType === 'rev');
   const expRows     = _isData.filter(r => r.plType === 'exp');
@@ -1151,7 +1178,7 @@ td{padding:7px 12px;border-bottom:1px solid #f0f2f4;font-size:.82rem;color:#2a3a
   <div class="meta">
     <strong>الشركة:</strong> ${esc(db)}<br>
     <strong>الفترة الحالية:</strong> من ${fromYM} إلى ${toYM}<br>
-    ${withCmp ? `<strong>فترة المقارنة:</strong> من ${prevFromYM} إلى ${prevToYM}<br>` : ''}
+    ${withCmp ? `<strong>فترة المقارنة (${esc(_isCmpModeLabel(cmpMode))}):</strong> من ${prevFromYM} إلى ${prevToYM}<br>` : ''}
     <strong>مستوى التفصيل:</strong> ${esc(lvlTxt)}<br>
     <strong>الفرع:</strong> ${esc(brTxt)}<br>
     <strong>تاريخ الإصدار:</strong> ${new Date().toLocaleDateString('ar-SA',{year:'numeric',month:'long',day:'numeric'})}
