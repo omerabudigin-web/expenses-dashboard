@@ -844,8 +844,11 @@ async function exportISExcel() {
     ws.pageSetup.showGridLines    = false;
     ws.pageSetup.blackAndWhite    = false;
     ws.pageSetup.margins = { left:0.6, right:0.5, top:0.75, bottom:0.6, header:0.3, footer:0.3 };
+    // ملاحظة: لازم مسافة بعد رمز حجم الخط (&8) قبل أي نص عربي — إن التصق رمز
+    // الحجم مباشرة برقم عربي (٠-٩ الشرقية) يُحدث عطلاً في محرك إكسل يُظهر
+    // الكلمة التالية بحجم ضخم يغطي الورقة عند الطباعة/التصدير لـ PDF.
     ws.headerFooter.oddFooter =
-      `&L&8${genDate}&C&8${(company || 'قائمة الدخل').replace(/&/g,'&&')} — سري للاستخدام الداخلي&Rصفحة &P من &N`;
+      `&L&8 ${genDate}&C&8 ${(company || 'قائمة الدخل').replace(/&/g,'&&')} — سري للاستخدام الداخلي&R&8 صفحة &P من &N`;
 
     ws.columns = withCmp
       ? [{width:58},{width:20},{width:20},{width:12}]
