@@ -1,6 +1,7 @@
 'use strict';
 const sql      = require('mssql');
 const { getPool } = require('../db');
+const { catFromCode } = require('./expenses');
 
 /*
  * Income Statement for a date range / level / branch.
@@ -42,7 +43,9 @@ async function getIncomeStatement(dbName, { from, to, level, branch, rootCode })
 
   const emptySummary = {
     revenueTotal: 0, cogsTotal: 0, otherDirectCostTotal: 0, costOfSales: 0,
-    grossProfit: 0, grossMargin: 0, expenseTotal: 0, opexTotal: 0, netProfit: 0,
+    grossProfit: 0, grossMargin: 0, expenseTotal: 0, opexTotal: 0,
+    financeCostTotal: 0, operatingProfit: 0, netProfit: 0,
+    catTotals: { sal:0, rent:0, maint:0, sell:0, dist:0, adm:0, fin:0, char:0, oth:0 },
   };
   if (!jdRes.recordset.length) return { rows: [], summary: emptySummary };
 
@@ -107,7 +110,8 @@ async function getIncomeStatement(dbName, { from, to, level, branch, rootCode })
   //              always computed over the FULL P&L regardless of rootCode,
   //              since "gross profit" only makes sense for the entity as a whole.
   const aggMap = new Map();
-  let revenueTotal = 0, cogsTotal = 0, otherDirectCostTotal = 0, expenseTotal = 0;
+  let revenueTotal = 0, cogsTotal = 0, otherDirectCostTotal = 0, expenseTotal = 0, financeCostTotal = 0;
+  const catTotals = { sal:0, rent:0, maint:0, sell:0, dist:0, adm:0, fin:0, char:0, oth:0 };
 
   for (const row of jdRes.recordset) {
     const leaf = acMap.get(row.leafID);
@@ -123,8 +127,17 @@ async function getIncomeStatement(dbName, { from, to, level, branch, rootCode })
     } else {
       const net = dr - cr;
       expenseTotal += net;
-      if      (leaf.code.startsWith('40101010')) cogsTotal            += net;
-      else if (leaf.code.startsWith('40101020')) otherDirectCostTotal += net;
+      if (leaf.code.startsWith('40101010')) {
+        cogsTotal += net;
+      } else if (leaf.code.startsWith('40101020')) {
+        otherDirectCostTotal += net;
+      } else {
+        // Operating expense (not cost of sales) — bucket by the same
+        // category convention used across the rest of the dashboard.
+        const cat = catFromCode(leaf.code);
+        catTotals[cat] = (catTotals[cat] || 0) + net;
+        if (cat === 'fin') financeCostTotal += net;
+      }
     }
 
     const anc = resolveAncestor(row.leafID);
@@ -141,13 +154,18 @@ async function getIncomeStatement(dbName, { from, to, level, branch, rootCode })
 
   const costOfSales = cogsTotal + otherDirectCostTotal;
   const grossProfit = revenueTotal - costOfSales;
+  const netProfit    = revenueTotal - expenseTotal;
   const summary = {
     revenueTotal, cogsTotal, otherDirectCostTotal, costOfSales,
     grossProfit,
     grossMargin: revenueTotal ? grossProfit / revenueTotal * 100 : 0,
     expenseTotal,
-    opexTotal:  expenseTotal - costOfSales,
-    netProfit:  revenueTotal - expenseTotal,
+    opexTotal: expenseTotal - costOfSales,
+    financeCostTotal,
+    // EBIT-equivalent: operating result before financing costs, Zakat and income tax.
+    operatingProfit: netProfit + financeCostTotal,
+    netProfit,
+    catTotals,
   };
 
   const rows = [...aggMap.values()]

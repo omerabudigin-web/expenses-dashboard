@@ -320,4 +320,4 @@ async function getDetails(dbName, opts) {
   return { rows, total, page, pageSize };
 }
 
-module.exports = { getMonthly, getBranches, getAccounts, getAssets, getDetails, getCompanyName, getBranchNames };
+module.exports = { getMonthly, getBranches, getAccounts, getAssets, getDetails, getCompanyName, getBranchNames, catFromCode };

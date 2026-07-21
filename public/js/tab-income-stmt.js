@@ -111,7 +111,7 @@ function initIncomeStatement() {
       .finally(() => { btn.disabled = false; btn.textContent = '📊 Excel'; });
   });
   document.getElementById('is-export-html').addEventListener('click',  exportISHTML);
-  document.getElementById('is-print').addEventListener('click', () => window.print());
+  document.getElementById('is-print').addEventListener('click', _isPrintFormal);
   document.getElementById('is-search').addEventListener('input', _renderISRows);
   document.getElementById('is-level').addEventListener('change', _isResetData);
   const cmpSel = document.getElementById('is-cmp-mode');
@@ -744,8 +744,64 @@ function _isRenderChart(revRows, expRows, totalRevNet, totalExpNet, netProfit) {
   });
 }
 
+// ── القائمة الرسمية (طباعة/تصدير) ────────────────────────────────────────────
+// تمثيل بصيغة القائمة المالية الرسمية وفق المعايير السعودية: بدون أعمدة مدين/دائن،
+// وبتفصيل الإيرادات وتكلفة المبيعات والمصروفات التشغيلية (مجمّعة حسب نفس تصنيف
+// CAT_ORDER المعتمد في بقية الداشبورد)، مع فصل التكاليف التمويلية/الفوائد البنكية
+// كي يظهر "الربح من العمليات" قبل الفوائد والزكاة والضريبة كبند مستقل.
+// كل سطر: { t: sec|item|subtotal|grand|final, label, val, cmp, accent }
+function _isFormalLines() {
+  if (!_isSummary) return null;
+  const sm = _isSummary, cm = _isCmpSummary;
+  const catTotals = sm.catTotals || {};
+  const cmpCat     = cm?.catTotals || {};
+  const revRows    = (_isData || []).filter(r => r.plType === 'rev');
+  const cmpMap     = _isCmpData ? new Map(_isCmpData.map(r => [r.code, r.net])) : null;
+
+  const lines = [];
+
+  lines.push({ t:'sec', label:'الإيرادات' });
+  revRows.forEach(r => lines.push({ t:'item', label:r.name,
+    val:r.net, cmp: cmpMap ? (cmpMap.get(r.code) ?? null) : null }));
+  lines.push({ t:'subtotal', label:'إجمالي الإيرادات', val:sm.revenueTotal, cmp: cm?.revenueTotal ?? null });
+
+  lines.push({ t:'sec', label:'تكلفة المبيعات' });
+  if (sm.cogsTotal)            lines.push({ t:'item', label:'تكلفة البضاعة المباعة', val:-sm.cogsTotal, cmp: cm ? -cm.cogsTotal : null });
+  if (sm.otherDirectCostTotal) lines.push({ t:'item', label:'تكاليف مباشرة أخرى',     val:-sm.otherDirectCostTotal, cmp: cm ? -cm.otherDirectCostTotal : null });
+  lines.push({ t:'subtotal', label:'إجمالي تكلفة المبيعات', val:-sm.costOfSales, cmp: cm ? -cm.costOfSales : null });
+
+  lines.push({ t:'grand', label:'مجمل الربح', val:sm.grossProfit, cmp: cm?.grossProfit ?? null, accent:'green' });
+
+  lines.push({ t:'sec', label:'المصروفات التشغيلية' });
+  const opexCats = CAT_ORDER.filter(c => c !== 'fin');
+  opexCats.forEach(c => {
+    const v = catTotals[c] || 0;
+    if (!v) return;
+    lines.push({ t:'item', label:CAT_LABEL[c], val:-v, cmp: cm ? -(cmpCat[c] || 0) : null });
+  });
+  const opexExFin    = sm.opexTotal - (sm.financeCostTotal || 0);
+  const cmpOpexExFin = cm ? (cm.opexTotal - (cm.financeCostTotal || 0)) : null;
+  lines.push({ t:'subtotal', label:'إجمالي المصروفات التشغيلية', val:-opexExFin, cmp: cmpOpexExFin !== null ? -cmpOpexExFin : null });
+
+  lines.push({ t:'grand', label:'الربح من العمليات (قبل الفوائد البنكية والزكاة والضريبة)',
+    val:sm.operatingProfit, cmp: cm?.operatingProfit ?? null, accent:'blue' });
+
+  if (sm.financeCostTotal) {
+    lines.push({ t:'sec', label:'التكاليف التمويلية' });
+    lines.push({ t:'item', label:CAT_LABEL.fin, val:-sm.financeCostTotal, cmp: cm ? -(cm.financeCostTotal || 0) : null });
+    lines.push({ t:'subtotal', label:'إجمالي التكاليف التمويلية', val:-sm.financeCostTotal, cmp: cm ? -(cm.financeCostTotal || 0) : null });
+  }
+
+  const isProfit = sm.netProfit >= 0;
+  lines.push({ t:'final',
+    label: isProfit ? 'صافي الربح للفترة (قبل الزكاة والضريبة)' : 'صافي الخسارة للفترة (قبل الزكاة والضريبة)',
+    val:sm.netProfit, cmp: cm?.netProfit ?? null, accent: isProfit ? 'green' : 'red' });
+
+  return lines;
+}
+
 async function exportISExcel() {
-  if (!_isData || !_isData.length) return;
+  if (!_isData || !_isData.length || !_isSummary) return;
   if (typeof ExcelJS === 'undefined') { alert('مكتبة ExcelJS لم تُحمَّل بعد، جرب تحديث الصفحة'); return; }
 
   const fromYM  = document.getElementById('is-from').value || '';
@@ -755,46 +811,45 @@ async function exportISExcel() {
   const lvlTxt  = ([...document.getElementById('is-level').options].find(o=>o.selected)||{}).textContent || '';
   const brTxt   = ([...document.getElementById('is-branch').options].find(o=>o.selected)||{}).textContent || 'جميع الفروع';
   const company = State.get('companyName') || '';
-  const withCmp = !!(cmpMode && _isCmpData);
-  const cmpMap  = withCmp ? new Map(_isCmpData.map(r => [r.code, r.net])) : null;
+  const withCmp = !!(cmpMode && _isCmpSummary);
   const genDate = new Date().toLocaleDateString('ar-SA', {year:'numeric',month:'long',day:'numeric'});
-
-  const revRows      = _isData.filter(r => r.plType === 'rev');
-  const expRows      = _isData.filter(r => r.plType === 'exp');
-  const totalRevNet  = revRows.reduce((s,r) => s + r.net, 0);
-  const totalExpNet  = expRows.reduce((s,r) => s + r.net, 0);
-  const netProfit    = totalRevNet - totalExpNet;
-  const cmpRevNet    = withCmp ? revRows.reduce((s,r) => s + (cmpMap.get(r.code)??0), 0) : null;
-  const cmpExpNet    = withCmp ? expRows.reduce((s,r) => s + (cmpMap.get(r.code)??0), 0) : null;
-  const netCmpProfit = withCmp ? cmpRevNet - cmpExpNet : null;
+  const lines   = _isFormalLines();
 
   try {
-    const NC      = withCmp ? 7 : 5;
+    const NC      = withCmp ? 4 : 2;
     const FONT    = 'Calibri';
     const numFmt  = '#,##0;[Red](#,##0);"-"';
-    const numFmt0 = '#,##0;#,##0;"-"';
     const CLR = {
       navyDark:'FF0A2040', navy:'FF1A3A6A', blueLight:'FFE8EEF8',
       bluePale:'FFF4F7FB', blueXPale:'FFDDE6F4', white:'FFFFFFFF',
       textDark:'FF111111', textNavy:'FF0A2040', textBlue:'FF1A3A6A',
       textLight:'FF6A8AAA', textGray:'FF888888',
-      greenBg:'FFF4FFF8', greenBdr:'FF90C890', greenText:'FF1A6A2A',
+      greenBg:'FFF4FFF8', greenText:'FF1A6A2A',
+      redBg:'FFFFF4F4',   redText:'FF8A2A00',
     };
+    const ACCENT_BG   = { green: CLR.greenBg, blue: CLR.blueXPale, red: CLR.redBg };
+    const ACCENT_TEXT = { green: CLR.greenText, blue: CLR.textNavy, red: CLR.redText };
     const solid = (a) => ({ type:'pattern', pattern:'solid', fgColor:{ argb:a } });
     const bdr   = (s,a) => ({ style:s, color:{ argb:a } });
 
     const wb = new ExcelJS.Workbook();
     wb.creator = 'MekSoft ERP Dashboard'; wb.created = new Date();
-    const ws = wb.addWorksheet('قائمة الدخل الشامل', { views:[{ rightToLeft:true }] });
-    ws.pageSetup.paperSize   = 9;
-    ws.pageSetup.orientation = 'portrait';
-    ws.pageSetup.fitToPage   = true;
-    ws.pageSetup.fitToWidth  = 1;
-    ws.pageSetup.margins = { left:0.6, right:0.5, top:0.75, bottom:0.75, header:0.3, footer:0.3 };
+    const ws = wb.addWorksheet('قائمة الدخل', { views:[{ rightToLeft:true, showGridLines:false }] });
+    ws.pageSetup.paperSize        = 9;
+    ws.pageSetup.orientation      = 'portrait';
+    ws.pageSetup.fitToPage        = true;
+    ws.pageSetup.fitToWidth       = 1;
+    ws.pageSetup.fitToHeight      = 0;   // بدون حد لعدد الصفحات رأسياً — يمنع انضغاط القائمة الطويلة في صفحة واحدة
+    ws.pageSetup.horizontalCentered = true;
+    ws.pageSetup.showGridLines    = false;
+    ws.pageSetup.blackAndWhite    = false;
+    ws.pageSetup.margins = { left:0.6, right:0.5, top:0.75, bottom:0.6, header:0.3, footer:0.3 };
+    ws.headerFooter.oddFooter =
+      `&L&8${genDate}&C&8${(company || 'قائمة الدخل').replace(/&/g,'&&')} — سري للاستخدام الداخلي&Rصفحة &P من &N`;
 
     ws.columns = withCmp
-      ? [{width:14},{width:52},{width:16},{width:16},{width:20},{width:20},{width:12}]
-      : [{width:14},{width:52},{width:16},{width:16},{width:20}];
+      ? [{width:58},{width:20},{width:20},{width:12}]
+      : [{width:58},{width:22}];
 
     const spanAll = (row) => ws.mergeCells(row.number, 1, row.number, NC);
 
@@ -810,208 +865,120 @@ async function exportISExcel() {
       row.getCell(1).fill = solid(CLR.white);
     }
 
-    function addSecHdr(text) {
-      const row = ws.addRow([text]); row.height = 20; spanAll(row);
-      const c = row.getCell(1);
-      c.font = { name:FONT, size:10, bold:true, color:{ argb:CLR.white } };
-      c.fill = solid(CLR.navy);
-      c.alignment = { horizontal:'right', vertical:'middle', indent:1 };
-    }
-
-    function addSubGrpHdr(text) {
-      const row = ws.addRow([text]); row.height = 18; spanAll(row);
-      const c = row.getCell(1);
-      c.font = { name:FONT, size:9.5, bold:true, italic:true, color:{ argb:CLR.textBlue } };
-      c.fill = solid(CLR.blueLight);
-      c.alignment = { horizontal:'right', vertical:'middle', indent:2 };
-      c.border = { top:bdr('thin','FFC0CFE8'), bottom:bdr('hair','FFD0D8E8') };
-    }
-
-    function setNum(cell, v, fmt, fc, bold) {
+    function setNum(cell, v, fc, bold) {
       cell.value = (v !== null && v !== undefined) ? +v.toFixed(0) : null;
-      cell.numFmt = fmt || numFmt;
+      cell.numFmt = numFmt;
       cell.alignment = { horizontal:'left', vertical:'middle' };
       cell.font = { name:FONT, size:9.5, color:{ argb: fc || CLR.textNavy }, bold: bold || false };
     }
 
-    function addItem(r, cmpV) {
-      const row = ws.addRow([r.code, r.name, r.pDebit||null, r.pCredit||null, r.net||null,
-        ...(withCmp ? [cmpV??null, null] : [])]);
-      row.height = 17;
-      const hairBdr = { bottom: bdr('hair','FFE8ECF0') };
-
-      row.getCell(1).font = { name:FONT, size:8.5, color:{ argb:CLR.textGray } };
-      row.getCell(1).alignment = { horizontal:'left', vertical:'middle' };
-      row.getCell(1).border = hairBdr;
-
-      row.getCell(2).font = { name:FONT, size:9.5, color:{ argb:CLR.textDark } };
-      row.getCell(2).alignment = { horizontal:'right', vertical:'middle', indent:2 };
-      row.getCell(2).border = hairBdr;
-
-      setNum(row.getCell(3), r.pDebit,  numFmt0, CLR.textNavy, false);
-      setNum(row.getCell(4), r.pCredit, numFmt0, CLR.textNavy, false);
-      setNum(row.getCell(5), r.net,     numFmt,  CLR.textNavy, false);
-      for (let ci=3;ci<=5;ci++) row.getCell(ci).border = hairBdr;
-
-      if (withCmp) {
-        setNum(row.getCell(6), cmpV??null, numFmt, CLR.textGray, false);
-        row.getCell(6).border = hairBdr; row.getCell(6).fill = solid('FFF8FAFE');
-        const pct = (cmpV !== null && cmpV !== undefined && Math.abs(cmpV) > 0.01)
-          ? +((r.net - cmpV) / Math.abs(cmpV) * 100).toFixed(1) : null;
-        if (pct !== null) {
-          row.getCell(7).value  = pct;
-          row.getCell(7).numFmt = '0.0"%"';
-          row.getCell(7).font   = { name:FONT, size:9, color:{ argb: pct >= 0 ? CLR.greenText : 'FFCC4444' } };
-        }
-        row.getCell(7).alignment = { horizontal:'center', vertical:'middle' };
-        row.getCell(7).border = hairBdr; row.getCell(7).fill = solid('FFF8FAFE');
+    // ── سطر واحد من القائمة الرسمية (بند / مجموع فرعي / إجمالي) ────────────────
+    function addFormalRow(line) {
+      if (line.t === 'sec') {
+        const row = ws.addRow([line.label]); row.height = 20; spanAll(row);
+        const c = row.getCell(1);
+        c.font = { name:FONT, size:10, bold:true, color:{ argb:CLR.white } };
+        c.fill = solid(CLR.navy);
+        c.alignment = { horizontal:'right', vertical:'middle', indent:1 };
+        return;
       }
-    }
 
-    function addSubTot(label, dr, cr, net, cmpNet) {
-      const row = ws.addRow([label,'',dr||null,cr||null,net||null,
-        ...(withCmp?[cmpNet??null,null]:[])]);
-      row.height = 18;
-      const topBot = { top:bdr('thin','FFC0CFE8'), bottom:bdr('thin','FFB0C4DC') };
-      row.eachCell({ includeEmpty:true }, c => { c.fill = solid(CLR.bluePale); c.border = topBot; });
-      row.getCell(1).font = { name:FONT, size:9.5, bold:true, color:{ argb:CLR.textNavy } };
-      row.getCell(1).alignment = { horizontal:'right', vertical:'middle' };
-      row.getCell(2).font = { name:FONT, size:9.5, bold:true, color:{ argb:CLR.textNavy } };
-      setNum(row.getCell(3), dr,  numFmt0, CLR.textNavy, true);
-      setNum(row.getCell(4), cr,  numFmt0, CLR.textNavy, true);
-      setNum(row.getCell(5), net, numFmt,  CLR.textNavy, true);
+      const isItem  = line.t === 'item';
+      const isBig   = line.t === 'grand' || line.t === 'final';
+      const bg      = isBig ? (ACCENT_BG[line.accent] || CLR.white)
+                    : line.t === 'subtotal' ? CLR.bluePale : CLR.white;
+      const fc      = isItem ? CLR.textDark : (ACCENT_TEXT[line.accent] || CLR.textNavy);
+      const valFc   = isItem ? CLR.textNavy : (ACCENT_TEXT[line.accent] || CLR.textNavy);
+
+      const row = ws.addRow([line.label, line.val ?? null, ...(withCmp ? [line.cmp ?? null, null] : [])]);
+      row.height = isItem ? 17 : line.t === 'subtotal' ? 18 : line.t === 'grand' ? 22 : 24;
+
+      row.getCell(1).font = { name:FONT, size: line.t==='final' ? 11 : (isItem ? 9.5 : 10.5), bold: !isItem, color:{ argb:fc } };
+      row.getCell(1).alignment = { horizontal:'right', vertical:'middle', indent: isItem ? 2 : 0 };
+      setNum(row.getCell(2), line.val, valFc, !isItem);
+      row.getCell(2).font = { ...row.getCell(2).font, size: line.t==='final' ? 11 : (isItem ? 9.5 : 10.5) };
+
+      row.eachCell({ includeEmpty:true }, c => { c.fill = solid(bg); });
+
+      if (isBig) {
+        const bord = { top:bdr('double',CLR.navyDark), bottom:bdr('medium',CLR.navyDark) };
+        row.eachCell({ includeEmpty:true }, c => { c.border = bord; });
+      } else if (line.t === 'subtotal') {
+        const bord = { top:bdr('thin','FFC0CFE8'), bottom:bdr('thin','FFB0C4DC') };
+        row.eachCell({ includeEmpty:true }, c => { c.border = bord; });
+      } else {
+        const hairBdr = { bottom: bdr('hair','FFE8ECF0') };
+        row.getCell(1).border = hairBdr; row.getCell(2).border = hairBdr;
+      }
+
       if (withCmp) {
-        setNum(row.getCell(6), cmpNet??null, numFmt, CLR.textGray, false);
-        row.getCell(6).fill = solid('FFF0F4FA');
-        if (cmpNet !== null && Math.abs(cmpNet) > 0.01) {
-          row.getCell(7).value  = +((net - cmpNet) / Math.abs(cmpNet) * 100).toFixed(1);
-          row.getCell(7).numFmt = '0.0"%"';
-          row.getCell(7).font   = { name:FONT, size:9, bold:true, color:{ argb:CLR.textGray } };
+        setNum(row.getCell(3), line.cmp ?? null, CLR.textGray, !isItem);
+        if (line.cmp !== null && line.cmp !== undefined && Math.abs(line.cmp) > 0.01) {
+          const pct = (line.val - line.cmp) / Math.abs(line.cmp) * 100;
+          row.getCell(4).value  = +pct.toFixed(1);
+          row.getCell(4).numFmt = '0.0"%"';
+          row.getCell(4).font   = { name:FONT, size:9, bold: !isItem, color:{ argb: pct >= 0 ? CLR.greenText : 'FFCC4444' } };
         }
-        row.getCell(7).alignment = { horizontal:'center', vertical:'middle' };
-        row.getCell(7).fill = solid('FFF0F4FA');
+        row.getCell(4).alignment = { horizontal:'center', vertical:'middle' };
+        if (isBig) {
+          const bord = { top:bdr('double',CLR.navyDark), bottom:bdr('medium',CLR.navyDark) };
+          row.getCell(3).border = bord; row.getCell(4).border = bord;
+        } else if (line.t === 'subtotal') {
+          const bord = { top:bdr('thin','FFC0CFE8'), bottom:bdr('thin','FFB0C4DC') };
+          row.getCell(3).border = bord; row.getCell(4).border = bord;
+        } else {
+          const hairBdr = { bottom: bdr('hair','FFE8ECF0') };
+          row.getCell(3).border = hairBdr; row.getCell(4).border = hairBdr;
+        }
       }
     }
 
     // ── Title block ──────────────────────────────────────────────────────────
-    addTitle(company || 'قائمة الدخل الشامل', 14, CLR.white, CLR.navyDark);
-    addTitle('قائمة الدخل الشامل', 12, CLR.white, CLR.navy);
+    addTitle(company || 'قائمة الدخل', 14, CLR.white, CLR.navyDark);
+    addTitle('قائمة الدخل', 12, CLR.white, CLR.navy);
     addTitle(`الفترة: ${fromYM} إلى ${toYM}${withCmp?`  |  مقارنة (${_isCmpModeLabel(cmpMode)}): ${prevFromYM} إلى ${prevToYM}`:''} | ${lvlTxt} | الفرع: ${brTxt}`, 9.5, 'FFAACCE8', CLR.navyDark);
     addTitle(`المبالغ بالريال السعودي  —  أُنشئ: ${genDate}`, 8.5, CLR.textLight, CLR.navyDark);
     addSpacer(4);
 
-    // ── Statement summary — Revenue / COGS / Gross Profit / OpEx / Net Profit ──
-    // Always the whole entity's numbers (ignores any drill-down filter below) —
-    // "gross profit" only makes sense for the full statement.
-    if (_isSummary) {
-      const sm = _isSummary, cm = _isCmpSummary;
-      addSecHdr('ملخص القائمة — الأرقام الرئيسية');
-      addSubTot('إجمالي الإيرادات',   null, null, sm.revenueTotal,  cm?.revenueTotal ?? null);
-      addSubTot('(-) تكلفة المبيعات', null, null, -sm.costOfSales,  cm ? -cm.costOfSales : null);
-      {
-        const row = ws.addRow(['مجمل الربح','','','',sm.grossProfit,
-          ...(withCmp ? [cm?.grossProfit ?? null, null] : [])]);
-        row.height = 22;
-        const bord = { top: bdr('double', CLR.navyDark), bottom: bdr('medium', CLR.navyDark) };
-        row.eachCell({ includeEmpty:true }, c => { c.fill = solid(CLR.greenBg); c.border = bord; });
-        row.getCell(1).font = { name:FONT, size:10.5, bold:true, color:{ argb:CLR.greenText } };
-        row.getCell(1).alignment = { horizontal:'right', vertical:'middle' };
-        setNum(row.getCell(5), sm.grossProfit, numFmt, CLR.greenText, true);
-        row.getCell(5).font = { name:FONT, size:10.5, bold:true, color:{ argb:CLR.greenText } };
-        if (withCmp) {
-          setNum(row.getCell(6), cm?.grossProfit ?? null, numFmt, CLR.textGray, false);
-          row.getCell(6).fill = solid('FFF0F4FA');
-          if (cm && Math.abs(cm.grossProfit) > 0.01) {
-            row.getCell(7).value  = +((sm.grossProfit - cm.grossProfit) / Math.abs(cm.grossProfit) * 100).toFixed(1);
-            row.getCell(7).numFmt = '0.0"%"';
-            row.getCell(7).font   = { name:FONT, size:9, bold:true, color:{ argb:CLR.greenText } };
-          }
-          row.getCell(7).alignment = { horizontal:'center', vertical:'middle' };
-          row.getCell(7).fill = solid('FFF0F4FA');
-        }
-      }
-      addSubTot('(-) المصروفات التشغيلية', null, null, -sm.opexTotal, cm ? -cm.opexTotal : null);
-      addSpacer(6);
+    // ── Column header — يظهر دائماً (وليس فقط عند تفعيل المقارنة) ──────────────
+    const colHdrRow = ws.addRow(withCmp
+      ? ['البيان', 'الفترة الحالية', 'فترة المقارنة', 'التغيير %']
+      : ['البيان', 'المبلغ (ر.س)']);
+    colHdrRow.height = 20;
+    colHdrRow.eachCell({ includeEmpty:true }, (c,ci) => {
+      c.font = { name:FONT, size:9.5, bold:true, color:{ argb:CLR.white } };
+      c.fill = solid(CLR.navy);
+      c.alignment = { horizontal: ci===1 ? 'right' : 'center', vertical:'middle' };
+      c.border = { bottom: bdr('medium', CLR.navyDark) };
+    });
+    const tableStartRow = colHdrRow.number;
+
+    lines.forEach(addFormalRow);
+    const tableEndRow = ws.rowCount;
+
+    // ── إطار خارجي حول القائمة كاملة + خط فاصل رأسي بين البيان والمبالغ ────────
+    for (let r = tableStartRow; r <= tableEndRow; r++) {
+      const row = ws.getRow(r);
+      const first = row.getCell(1), last = row.getCell(NC);
+      first.border = { ...first.border, left:  bdr('medium', CLR.navyDark) };
+      last.border  = { ...last.border,  right: bdr('medium', CLR.navyDark) };
+      if (r === tableStartRow) { first.border = { ...first.border, top: bdr('medium', CLR.navyDark) }; last.border = { ...last.border, top: bdr('medium', CLR.navyDark) }; }
+      if (r === tableEndRow)   { first.border = { ...first.border, bottom: bdr('medium', CLR.navyDark) }; last.border = { ...last.border, bottom: bdr('medium', CLR.navyDark) }; }
     }
 
-    // ── Column header ────────────────────────────────────────────────────────
+    // تُطبع عناوين القائمة وصف رأس الأعمدة في أعلى كل صفحة عند تعدّد الصفحات
+    ws.pageSetup.printTitlesRow = `1:${tableStartRow}`;
+    // تجميد الصفوف العلوية عند الاستعراض على الشاشة قبل الطباعة
+    ws.views = [{ rightToLeft:true, showGridLines:false, state:'frozen', ySplit: tableStartRow }];
+
+    // ── تذييل داخل الورقة ────────────────────────────────────────────────────
+    addSpacer(6);
     {
-      const hdr = ['كود الحساب','البيان','مدين الفترة','دائن الفترة','الصافي (ر.س)'];
-      if (withCmp) hdr.push(`صافي المقارنة (${prevFromYM}–${prevToYM})`, 'التغيير %');
-      const row = ws.addRow(hdr); row.height = 22;
-      row.eachCell({ includeEmpty:true }, (c,ci) => {
-        c.font = { name:FONT, size:10, bold:true, color:{ argb:CLR.white } };
-        c.fill = solid(CLR.navy);
-        c.alignment = { horizontal: ci<=2 ? 'right' : 'center', vertical:'middle' };
-        c.border = { bottom: bdr('medium',CLR.navyDark) };
-      });
-    }
-
-    // ── Revenue section ──────────────────────────────────────────────────────
-    if (revRows.length > 0) {
-      addSpacer(4);
-      addSecHdr('الإيرادات');
-      revRows.forEach(r => addItem(r, withCmp ? (cmpMap.get(r.code)??null) : null));
-      const rDr = revRows.reduce((s,r)=>s+r.pDebit,0);
-      const rCr = revRows.reduce((s,r)=>s+r.pCredit,0);
-      addSubTot('إجمالي الإيرادات', rDr, rCr, totalRevNet, cmpRevNet);
-    }
-
-    // ── Expenses section ─────────────────────────────────────────────────────
-    if (expRows.length > 0) {
-      addSpacer(4);
-      addSecHdr('المصروفات والتكاليف');
-      const expGroups = new Map();
-      expRows.forEach(r => {
-        const k = r.parentCode || r.code.substring(0,2);
-        if (!expGroups.has(k)) expGroups.set(k, { label: r.parentName||k, rows:[] });
-        expGroups.get(k).rows.push(r);
-      });
-      const multi = expGroups.size > 1;
-      [...expGroups.entries()].sort((a,b)=>a[0].localeCompare(b[0])).forEach(([,grp]) => {
-        if (multi) addSubGrpHdr(grp.label);
-        grp.rows.forEach(r => addItem(r, withCmp ? (cmpMap.get(r.code)??null) : null));
-        if (multi) {
-          const gDr  = grp.rows.reduce((s,r)=>s+r.pDebit,0);
-          const gCr  = grp.rows.reduce((s,r)=>s+r.pCredit,0);
-          const gNet = grp.rows.reduce((s,r)=>s+r.net,0);
-          const gCmp = withCmp ? grp.rows.reduce((s,r)=>s+(cmpMap.get(r.code)??0),0) : null;
-          addSubTot(`إجمالي ${grp.label}`, gDr, gCr, gNet, gCmp);
-        }
-      });
-      const eDr = expRows.reduce((s,r)=>s+r.pDebit,0);
-      const eCr = expRows.reduce((s,r)=>s+r.pCredit,0);
-      addSubTot('إجمالي المصروفات', eDr, eCr, totalExpNet, cmpExpNet);
-    }
-
-    // ── Net profit grand row ─────────────────────────────────────────────────
-    addSpacer();
-    {
-      const isProfit = netProfit >= 0;
-      const netLabel = isProfit ? 'صافي الربح للفترة' : 'صافي الخسارة للفترة';
-      const netColor = isProfit ? CLR.greenText : 'FF8A2A00';
-      const netBg    = isProfit ? CLR.greenBg   : 'FFFFF4F4';
-      const row = ws.addRow([netLabel,'','','',netProfit||null,
-        ...(withCmp?[netCmpProfit??null,null]:[])]);
-      row.height = 24;
-      const bord = { top:bdr('double',CLR.navyDark), bottom:bdr('medium',CLR.navyDark) };
-      row.eachCell({ includeEmpty:true }, c => { c.fill = solid(netBg); c.border = bord; });
-      row.getCell(1).font = { name:FONT, size:11, bold:true, color:{ argb:netColor } };
-      row.getCell(1).alignment = { horizontal:'right', vertical:'middle' };
-      setNum(row.getCell(5), netProfit, numFmt, netColor, true);
-      row.getCell(5).font = { name:FONT, size:11, bold:true, color:{ argb:netColor } };
-      if (withCmp) {
-        setNum(row.getCell(6), netCmpProfit??null, numFmt, CLR.textBlue, true);
-        row.getCell(6).font = { name:FONT, size:11, bold:true, color:{ argb:CLR.textBlue } };
-        row.getCell(6).fill = solid('FFF0F4FA');
-        if (netCmpProfit !== null && Math.abs(netCmpProfit) > 0.01) {
-          row.getCell(7).value  = +((netProfit - netCmpProfit) / Math.abs(netCmpProfit) * 100).toFixed(1);
-          row.getCell(7).numFmt = '0.0"%"';
-          row.getCell(7).font   = { name:FONT, size:10, bold:true, color:{ argb:netColor } };
-        }
-        row.getCell(7).alignment = { horizontal:'center', vertical:'middle' };
-        row.getCell(7).fill = solid('FFF0F4FA');
-      }
+      const row = ws.addRow(['تم إنشاء هذا التقرير آلياً وفق معايير المحاسبة السعودية للشركات الصغيرة والمتوسطة (IFRS for SMEs — SOCPA)']);
+      row.height = 16; spanAll(row);
+      const c = row.getCell(1);
+      c.font = { name:FONT, size:8, italic:true, color:{ argb:CLR.textLight } };
+      c.alignment = { horizontal:'center', vertical:'middle' };
     }
 
     // ── Download ─────────────────────────────────────────────────────────────
@@ -1028,43 +995,23 @@ async function exportISExcel() {
   }
 }
 
-function exportISHTML() {
-  if (!_isData || !_isData.length) return;
-
+// يبني مستند HTML الكامل للقائمة الرسمية — تُستخدم مشتركةً بين تصدير HTML والطباعة،
+// حتى لا يتكرر منطق التنسيق بين الحالتين.
+function _isFormalHTMLDoc() {
   const fromYM = document.getElementById('is-from').value || '';
   const toYM   = document.getElementById('is-to').value   || '';
   const lvlTxt = ([...document.getElementById('is-level').options].find(o=>o.selected)||{}).textContent || '';
   const brTxt  = ([...document.getElementById('is-branch').options].find(o=>o.selected)||{}).textContent || 'جميع الفروع';
   const db     = State.get('activeDb') || '';
+  const company = State.get('companyName') || '';
 
   const cmpMode = document.getElementById('is-cmp-mode')?.value || '';
-  const withCmp = !!(cmpMode && _isCmpData);
-  const cmpMap  = withCmp ? new Map(_isCmpData.map(r => [r.code, r.net])) : null;
+  const withCmp = !!(cmpMode && _isCmpSummary);
   const { prevFromYM, prevToYM } = _isCmpRange(fromYM, toYM, cmpMode);
-
-  const revRows     = _isData.filter(r => r.plType === 'rev');
-  const expRows     = _isData.filter(r => r.plType === 'exp');
-  const totalRevNet = revRows.reduce((s,r)=>s+r.net,0);
-  const totalExpNet = expRows.reduce((s,r)=>s+r.net,0);
-  const netProfit   = totalRevNet - totalExpNet;
-  const isProfit    = netProfit >= 0;
-  const cmpRevNet   = withCmp ? revRows.reduce((s,r)=>s+(cmpMap.get(r.code)??0),0) : null;
-  const cmpExpNet   = withCmp ? expRows.reduce((s,r)=>s+(cmpMap.get(r.code)??0),0) : null;
-  const netCmpProfit = withCmp ? cmpRevNet - cmpExpNet : null;
-
-  const expGroups = new Map();
-  expRows.forEach(r => {
-    const k = r.parentCode || r.code.substring(0,2);
-    if (!expGroups.has(k)) expGroups.set(k, { label: r.parentName || k, rows: [] });
-    expGroups.get(k).rows.push(r);
-  });
-  const sortedGrps = [...expGroups.entries()].sort((a,b)=>a[0].localeCompare(b[0]));
+  const lines = _isFormalLines();
 
   function fmtN(n) { return (+n||0).toLocaleString('ar-SA',{minimumFractionDigits:2,maximumFractionDigits:2}); }
-  function fmtNet(n,isRev) {
-    if (isRev) return n >= 0 ? `<span style="color:#1a8a3a">${fmtN(n)}</span>` : `<span style="color:#cc3333">(${fmtN(-n)})</span>`;
-    return fmtN(n);
-  }
+  function fmtSg(n) { return n >= 0 ? fmtN(n) : `(${fmtN(-n)})`; }
   function pctHtml(cur, cmpV) {
     if (!withCmp) return '';
     if (cmpV === null || cmpV === undefined) return '<td class="num" style="color:#aaa">—</td>';
@@ -1072,164 +1019,115 @@ function exportISHTML() {
     const p = (cur - cmpV) / Math.abs(cmpV) * 100;
     return `<td class="num" style="color:${p>=0?'#1a7a3a':'#cc3333'}">${p>=0?'▲':'▼'}&nbsp;${Math.abs(p).toFixed(1)}%</td>`;
   }
-  const C = withCmp ? 7 : 5;
-
-  function rowsHtml(arr, indent, isRev) {
-    return arr.map(r => {
-      const cmpV = withCmp ? (cmpMap.get(r.code) ?? null) : null;
-      const cmpCell = withCmp ? `<td class="num" style="color:${cmpV!==null?(cmpV>=0?'#1a7a3a':'#cc3333'):'#aaa'}">${cmpV!==null?fmtN(cmpV):'—'}</td>${pctHtml(r.net,cmpV)}` : '';
-      return `<tr>
-        <td style="font-family:monospace;color:#555;font-size:.78rem;padding-right:${indent}px">${r.code}</td>
-        <td>${r.name}</td>
-        <td class="num">${r.pDebit ? fmtN(r.pDebit) : '—'}</td>
-        <td class="num">${r.pCredit ? fmtN(r.pCredit) : '—'}</td>
-        <td class="num">${fmtNet(r.net, isRev)}</td>
-        ${cmpCell}
-      </tr>`;
-    }).join('');
-  }
-
-  let bodyHtml = '';
-  if (revRows.length > 0) {
-    const rDr = revRows.reduce((s,r)=>s+r.pDebit,0);
-    const rCr = revRows.reduce((s,r)=>s+r.pCredit,0);
-    const cmpSubtotalCells = withCmp
-      ? `<td class="num" style="color:${cmpRevNet>=0?'#1a7a3a':'#cc3333'}">${fmtN(cmpRevNet)}</td>${pctHtml(totalRevNet,cmpRevNet)}`
-      : '';
-    bodyHtml += `
-      <tr class="sec-hdr rev"><td colspan="${C}">الإيرادات</td></tr>
-      ${rowsHtml(revRows, 20, true)}
-      <tr class="subtotal">
-        <td colspan="2" class="lbl">إجمالي الإيرادات</td>
-        <td class="num">${fmtN(rDr)}</td><td class="num">${fmtN(rCr)}</td>
-        <td class="num" style="color:${totalRevNet>=0?'#1a8a3a':'#cc3333'}">${totalRevNet>=0?fmtN(totalRevNet):'('+fmtN(-totalRevNet)+')'}</td>
-        ${cmpSubtotalCells}
-      </tr>`;
-  }
-  if (expRows.length > 0) {
-    bodyHtml += `<tr class="sec-hdr exp"><td colspan="${C}">المصروفات</td></tr>`;
-    const multi = sortedGrps.length > 1;
-    sortedGrps.forEach(([,grp]) => {
-      const gDr  = grp.rows.reduce((s,r)=>s+r.pDebit,0);
-      const gCr  = grp.rows.reduce((s,r)=>s+r.pCredit,0);
-      const gNet = grp.rows.reduce((s,r)=>s+r.net,0);
-      const gCmp = withCmp ? grp.rows.reduce((s,r)=>s+(cmpMap.get(r.code)??0),0) : null;
-      if (multi) bodyHtml += `<tr class="grp-hdr"><td colspan="${C}">${grp.label}</td></tr>`;
-      bodyHtml += rowsHtml(grp.rows, multi ? 32 : 20, false);
-      if (multi) {
-        const cmpGrpCells = withCmp ? `<td class="num" style="color:#666">${fmtN(gCmp)}</td>${pctHtml(gNet,gCmp)}` : '';
-        bodyHtml += `<tr class="grp-subtotal"><td colspan="2" class="lbl">إجمالي ${grp.label}</td><td class="num">${fmtN(gDr)}</td><td class="num">${fmtN(gCr)}</td><td class="num">${fmtN(gNet)}</td>${cmpGrpCells}</tr>`;
-      }
-    });
-    const eDr = expRows.reduce((s,r)=>s+r.pDebit,0);
-    const eCr = expRows.reduce((s,r)=>s+r.pCredit,0);
-    const cmpExpCells = withCmp ? `<td class="num" style="color:#666">${fmtN(cmpExpNet)}</td>${pctHtml(totalExpNet,cmpExpNet)}` : '';
-    bodyHtml += `<tr class="subtotal"><td colspan="2" class="lbl">إجمالي المصروفات</td><td class="num">${fmtN(eDr)}</td><td class="num">${fmtN(eCr)}</td><td class="num">${fmtN(totalExpNet)}</td>${cmpExpCells}</tr>`;
-  }
-
-  const grandDr = revRows.reduce((s,r)=>s+r.pDebit,0)+expRows.reduce((s,r)=>s+r.pDebit,0);
-  const grandCr = revRows.reduce((s,r)=>s+r.pCredit,0)+expRows.reduce((s,r)=>s+r.pCredit,0);
-  const cmpFootCells = withCmp
-    ? `<td class="num" style="background:#f0f4ff;font-weight:800;font-size:1rem;color:${netCmpProfit>=0?'#1a5a2a':'#7a1a1a'}">${netCmpProfit>=0?fmtN(netCmpProfit):'('+fmtN(-netCmpProfit)+')'}</td>${pctHtml(netProfit,netCmpProfit)}`
+  const cmpValCell = (cmpV) => withCmp
+    ? `<td class="num" style="color:#666">${cmpV!==null&&cmpV!==undefined?fmtSg(cmpV):'—'}</td>`
     : '';
-  const cmpColsHdr = withCmp ? `<th class="num" style="background:#2a4a7a;min-width:120px">صافي المقارنة<br><small style="font-weight:400;font-size:.72rem">${prevFromYM}–${prevToYM}</small></th><th class="num" style="background:#2a4a7a;min-width:80px">التغيير%</th>` : '';
 
-  const html = `<!DOCTYPE html>
+  const rowClass = { sec:'sec-hdr', item:'', subtotal:'subtotal', grand:'grand', final:'final' };
+  const bodyHtml = (lines || []).map(line => {
+    if (line.t === 'sec') return `<tr class="sec-hdr"><td colspan="${withCmp?4:2}">${esc(line.label)}</td></tr>`;
+    const cls = rowClass[line.t] || '';
+    const accentCls = line.accent ? ` ${line.accent}` : '';
+    const valCls = line.t === 'item' ? '' : (line.accent === 'red' ? 'style="color:#7a1a1a"' : line.accent === 'green' ? 'style="color:#1a5a2a"' : '');
+    return `<tr class="${cls}${accentCls}">
+      <td class="lbl">${esc(line.label)}</td>
+      <td class="num" ${valCls}>${fmtSg(line.val)}</td>
+      ${cmpValCell(line.cmp)}${pctHtml(line.val, line.cmp)}
+    </tr>`;
+  }).join('');
+
+  const cmpColsHdr = withCmp ? `<th class="num" style="min-width:120px">فترة المقارنة</th><th class="num" style="min-width:80px">التغيير%</th>` : '';
+
+  return `<!DOCTYPE html>
 <html dir="rtl" lang="ar">
 <head><meta charset="UTF-8">
-<title>قائمة الدخل الشامل — ${db}</title>
+<title>قائمة الدخل — ${esc(db)}</title>
 <style>
+@page{size:A4 portrait;margin:15mm 12mm}
 *{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
 body{font-family:'Segoe UI',Tahoma,Arial,sans-serif;font-size:13px;color:#1a2a3a;direction:rtl;background:#f8f9fa;padding:20px}
+.sheet{max-width:900px;margin:0 auto}
 .cover{background:#fff;border:1px solid #dee2e6;border-radius:8px;padding:20px 28px;margin-bottom:18px}
 .cover h1{font-size:1.2rem;color:#1a3a5a;margin-bottom:4px}
 .cover .meta{font-size:.82rem;color:#555;line-height:1.9}
 .cover .meta strong{color:#1a3a5a}
-table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #dee2e6;border-radius:6px;overflow:hidden}
-th{background:#1a3a5a;color:#fff;padding:9px 12px;text-align:right;font-weight:600;font-size:.82rem}
-td{padding:7px 12px;border-bottom:1px solid #f0f2f4;font-size:.82rem;color:#2a3a4a}
+table{width:100%;border-collapse:collapse;background:#fff;border:2px solid #1a3a5a;border-radius:0}
+th{background:#1a3a5a;color:#fff;padding:9px 12px;text-align:right;font-weight:600;font-size:.82rem;border-bottom:2px solid #0a2040}
+th:not(:last-child),td:not(:last-child){border-left:1px solid #dce3ec}
+td{padding:7px 12px;border-bottom:1px solid #f0f2f4;font-size:.86rem;color:#2a3a4a}
+td.lbl{text-align:right}
 .num{text-align:left;font-variant-numeric:tabular-nums;font-family:monospace}
-.sec-hdr td{font-weight:800;font-size:.86rem;padding:8px 12px;letter-spacing:.3px}
-.sec-hdr.rev td{background:#e6f9ee;color:#1a5a2a;border-right:4px solid #2ab070}
-.sec-hdr.exp td{background:#fdf0e8;color:#7a2a10;border-right:4px solid #c05020}
-.grp-hdr td{background:#faf5f0;color:#7a4a20;font-weight:600;font-size:.8rem;padding:5px 12px 5px 12px;padding-right:24px;border-right:3px solid #d08050}
+thead{display:table-header-group}
+tbody tr{break-inside:avoid;page-break-inside:avoid}
+.sec-hdr{break-after:avoid;page-break-after:avoid}
+.sec-hdr td{font-weight:700;font-size:.84rem;padding:8px 12px;letter-spacing:.3px;background:#1a3a5a;color:#fff}
 .subtotal td{background:#f0f5ff;font-weight:700;border-top:1px solid #bcd;border-bottom:2px solid #bcd}
-.grp-subtotal td{background:#fdf5ee;font-weight:600;border-top:1px dashed #dca}
-.subtotal .lbl{text-align:right}
-.net-banner{margin-top:16px;padding:12px 18px;border-radius:6px;font-weight:700;font-size:1rem;text-align:center}
-.net-profit{background:#e6f9ee;border:1px solid #2ab070;color:#1a5a2a}
-.net-loss{background:#fde8e8;border:1px solid #b04040;color:#7a1a1a}
-.foot{margin-top:14px;font-size:.73rem;color:#888;text-align:center}
-.stmt-summary{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:18px}
-.stmt-kpi{background:#fff;border:1px solid #dee2e6;border-radius:8px;padding:12px 14px;border-right:4px solid #1a3a5a}
-.stmt-kpi .lbl{font-size:.72rem;color:#667;margin-bottom:5px}
-.stmt-kpi .val{font-size:1.02rem;font-weight:700;color:#1a3a5a;font-variant-numeric:tabular-nums}
-.stmt-kpi .sub{font-size:.68rem;color:#889;margin-top:3px}
-.stmt-kpi.gross{border-right-color:#2ab070;background:#f4fdf8}
-.stmt-kpi.gross .val{color:#1a6a2a}
-.stmt-kpi.net{border-right-color:#1a5a2a}
-@media print{.stmt-summary{grid-template-columns:repeat(5,1fr)}}
-@media(max-width:900px){.stmt-summary{grid-template-columns:repeat(2,1fr)}}
-@media print{body{padding:10px;background:#fff}.cover{border:none;padding:10px 0}.foot{display:none}}
+.grand td{font-weight:800;font-size:.98rem;border-top:3px double #1a3a5a;border-bottom:2px solid #1a3a5a}
+.grand.green td{background:#e6f9ee;color:#1a5a2a}
+.grand.blue td{background:#eaf0fb;color:#0a2040}
+.final td{font-weight:900;font-size:1.05rem;border-top:3px double #1a3a5a;border-bottom:2px solid #1a3a5a}
+.final.green td{background:#e6f9ee;color:#1a5a2a}
+.final.red td{background:#fde8e8;color:#7a1a1a}
+.foot{margin-top:14px;font-size:.73rem;color:#888;text-align:center;border-top:1px solid #e0e4e8;padding-top:8px}
+@media print{
+  body{padding:0;background:#fff}
+  .sheet{max-width:none}
+  .cover{border:none;padding:0 0 10px 0;break-after:avoid;page-break-after:avoid}
+  table{border-radius:0}
+  .foot{break-inside:avoid;page-break-inside:avoid}
+}
 </style></head>
 <body>
+<div class="sheet">
 <div class="cover">
-  <h1>قائمة الدخل الشامل${withCmp?' — مع فترة المقارنة':''}</h1>
+  <h1>${esc(company || 'قائمة الدخل')}</h1>
   <div class="meta">
-    <strong>الشركة:</strong> ${esc(db)}<br>
-    <strong>الفترة الحالية:</strong> من ${fromYM} إلى ${toYM}<br>
-    ${withCmp ? `<strong>فترة المقارنة (${esc(_isCmpModeLabel(cmpMode))}):</strong> من ${prevFromYM} إلى ${prevToYM}<br>` : ''}
-    <strong>مستوى التفصيل:</strong> ${esc(lvlTxt)}<br>
+    <strong>الفترة الحالية:</strong> من ${esc(fromYM)} إلى ${esc(toYM)}<br>
+    ${withCmp ? `<strong>فترة المقارنة (${esc(_isCmpModeLabel(cmpMode))}):</strong> من ${esc(prevFromYM)} إلى ${esc(prevToYM)}<br>` : ''}
     <strong>الفرع:</strong> ${esc(brTxt)}<br>
     <strong>تاريخ الإصدار:</strong> ${new Date().toLocaleDateString('ar-SA',{year:'numeric',month:'long',day:'numeric'})}
   </div>
 </div>
-${_isSummary ? (() => {
-  const sm = _isSummary;
-  const fmtSg = n => n >= 0 ? fmtN(n) : `(${fmtN(-n)})`;
-  const items = [
-    { lbl:'إجمالي الإيرادات',    val: fmtSg(sm.revenueTotal), sub: '100% من الإيراد', cls:'' },
-    { lbl:'تكلفة المبيعات',      val: `(${fmtN(sm.costOfSales)})`, sub: sm.revenueTotal ? (sm.costOfSales/sm.revenueTotal*100).toFixed(1)+'% من الإيراد' : '—', cls:'' },
-    { lbl:'مجمل الربح',          val: fmtSg(sm.grossProfit), sub: 'هامش '+sm.grossMargin.toFixed(1)+'%', cls:'gross' },
-    { lbl:'المصروفات التشغيلية', val: `(${fmtN(sm.opexTotal)})`, sub: sm.revenueTotal ? (sm.opexTotal/sm.revenueTotal*100).toFixed(1)+'% من الإيراد' : '—', cls:'' },
-    { lbl: sm.netProfit>=0?'صافي الربح':'صافي الخسارة', val: fmtSg(sm.netProfit), sub: 'هامش '+(sm.revenueTotal?(sm.netProfit/sm.revenueTotal*100).toFixed(1):'0')+'%', cls:'net' },
-  ];
-  return `<div class="stmt-summary">${items.map(k=>`<div class="stmt-kpi ${k.cls}"><div class="lbl">${k.lbl}</div><div class="val">${k.val} ر.س</div><div class="sub">${k.sub}</div></div>`).join('')}</div>`;
-})() : ''}
 <table>
 <thead>
   <tr>
-    <th style="min-width:110px">كود الحساب</th>
-    <th style="min-width:200px">البيان</th>
-    <th class="num" style="min-width:110px">مدين الفترة</th>
-    <th class="num" style="min-width:110px">دائن الفترة</th>
-    <th class="num" style="min-width:120px">الصافي (ر.س)</th>
+    <th style="min-width:220px">البيان</th>
+    <th class="num" style="min-width:130px">المبلغ (ر.س)</th>
     ${cmpColsHdr}
   </tr>
 </thead>
 <tbody>
 ${bodyHtml}
 </tbody>
-<tfoot>
-  <tr style="border-top:2px solid #1a3a5a">
-    <td colspan="2" style="font-weight:900;font-size:.98rem;text-align:right;padding:10px 12px;background:#f0f4ff;color:${isProfit?'#1a5a2a':'#7a1a1a'}">${isProfit?'صافي الربح للفترة':'صافي الخسارة للفترة'}</td>
-    <td class="num" style="background:#f0f4ff;font-weight:700">${fmtN(grandDr)}</td>
-    <td class="num" style="background:#f0f4ff;font-weight:700">${fmtN(grandCr)}</td>
-    <td class="num" style="background:#f0f4ff;font-weight:900;font-size:1.02rem;color:${isProfit?'#1a5a2a':'#7a1a1a'}">${isProfit?fmtN(netProfit):'('+fmtN(-netProfit)+')'}</td>
-    ${cmpFootCells}
-  </tr>
-</tfoot>
 </table>
-<div class="net-banner ${isProfit?'net-profit':'net-loss'}">
-  الفترة الحالية — ${isProfit?'صافي الربح':'صافي الخسارة'}: ${isProfit?fmtN(netProfit):'('+fmtN(-netProfit)+')'} ر.س
-  ${withCmp && netCmpProfit!==null ? `&nbsp;&nbsp;|&nbsp;&nbsp; فترة المقارنة: ${netCmpProfit>=0?fmtN(netCmpProfit):'('+fmtN(-netCmpProfit)+')'} ر.س` : ''}
-</div>
 <div class="foot">تم إنشاء هذا التقرير وفق معايير المحاسبة السعودية للشركات الصغيرة والمتوسطة (IFRS for SMEs — SOCPA) — ${new Date().toLocaleString('ar-SA')}</div>
+</div>
 </body></html>`;
+}
 
+function exportISHTML() {
+  if (!_isData || !_isData.length || !_isSummary) return;
+  const fromYM = document.getElementById('is-from').value || '';
+  const toYM   = document.getElementById('is-to').value   || '';
+  const cmpMode = document.getElementById('is-cmp-mode')?.value || '';
+  const withCmp = !!(cmpMode && _isCmpSummary);
+
+  const html = _isFormalHTMLDoc();
   const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
   a.href = url; a.download = `قائمة_الدخل_${fromYM}_${toYM}${withCmp?'_مقارنة':''}.html`;
   a.click(); URL.revokeObjectURL(url);
+}
+
+function _isPrintFormal() {
+  if (!_isData || !_isData.length || !_isSummary) { alert('حمّل بيانات القائمة أولاً'); return; }
+  const html = _isFormalHTMLDoc();
+  const win = window.open('', '_blank');
+  if (!win) { alert('الرجاء السماح بالنوافذ المنبثقة للطباعة'); return; }
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  setTimeout(() => { try { win.print(); } catch(_) {} }, 300);
 }
