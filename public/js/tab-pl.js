@@ -322,7 +322,10 @@ function buildPLHTMLReport(c, cp, plMonths, period) {
   return `<!DOCTYPE html><html dir="rtl" lang="ar">
 <head><meta charset="UTF-8"><title>قائمة الدخل — ${periodLabel}</title>
 <style>
+  @page{size:A4 portrait;margin:15mm 12mm}
+  *{box-sizing:border-box}
   body{font-family:'Segoe UI',Tahoma,Arial,sans-serif;margin:0;padding:20px;background:#fff;color:#222;direction:rtl}
+  .sheet{max-width:960px;margin:0 auto}
   h1{font-size:1.4rem;border-bottom:3px solid #1a4a8a;padding-bottom:10px;color:#1a4a8a;margin-bottom:6px}
   .meta{font-size:.78rem;color:#666;margin-bottom:20px}
   .kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:22px}
@@ -330,9 +333,13 @@ function buildPLHTMLReport(c, cp, plMonths, period) {
   .kpi .lbl{font-size:.74rem;color:#557;margin-bottom:4px}
   .kpi .val{font-size:1.1rem;font-weight:700;color:#1a4a8a}
   .kpi .sub{font-size:.72rem;color:#779;margin-top:3px}
-  table{width:100%;border-collapse:collapse;font-size:.82rem}
-  th{background:#1a4a8a;color:#fff;padding:8px 10px;text-align:right;font-weight:600}
+  table{width:100%;border-collapse:collapse;font-size:.82rem;border:2px solid #1a4a8a;margin-bottom:10px}
+  th{background:#1a4a8a;color:#fff;padding:8px 10px;text-align:right;font-weight:600;border-bottom:2px solid #0a2848}
+  th:not(:last-child),td:not(:last-child){border-left:1px solid #dce3ec}
   td{padding:7px 10px;border-bottom:1px solid #e0e8f0}
+  thead{display:table-header-group}
+  tbody tr{break-inside:avoid;page-break-inside:avoid}
+  .section{break-after:avoid;page-break-after:avoid}
   .section td{background:#e8f0fb;font-weight:700;color:#1a4a8a;font-size:.85rem;padding:8px 10px}
   .subtotal td{background:#f5f8ff;font-weight:600;border-top:2px solid #cde}
   .total td{background:#1a4a8a;color:#fff;font-weight:700;font-size:.95rem}
@@ -341,8 +348,15 @@ function buildPLHTMLReport(c, cp, plMonths, period) {
   .pos{color:#1a7a4a}.neg{color:#8a1010}
   .bar-bg{height:4px;background:#e0e8f0;border-radius:2px;overflow:hidden;margin-top:3px}
   .bar-fill{height:100%;border-radius:2px}
-  @media print{body{padding:10px}}
+  .foot{margin-top:14px;font-size:.73rem;color:#888;text-align:center;border-top:1px solid #e0e4e8;padding-top:8px}
+  @media print{
+    body{padding:0}
+    .sheet{max-width:none}
+    h1{break-after:avoid;page-break-after:avoid}
+    .foot{break-inside:avoid;page-break-inside:avoid}
+  }
 </style></head><body>
+<div class="sheet">
 <h1>📋 قائمة الدخل</h1>
 <div class="meta">الفترة: ${periodLabel} &nbsp;|&nbsp; ${plMonths.length} شهر &nbsp;|&nbsp; تاريخ الطباعة: ${new Date().toLocaleDateString('ar-SA')}</div>
 <div class="kpis">
@@ -384,6 +398,8 @@ function buildPLHTMLReport(c, cp, plMonths, period) {
     </tbody>
   </table>
 </div>
+<div class="foot">تم إنشاء هذا التقرير آلياً وفق معايير المحاسبة السعودية للشركات الصغيرة والمتوسطة (IFRS for SMEs — SOCPA) — ${new Date().toLocaleString('ar-SA')}</div>
+</div>
 </body></html>`;
 }
 
@@ -414,6 +430,44 @@ function printPLPDF() {
   setTimeout(() => { w.focus(); w.print(); }, 800);
 }
 
+// إعداد صفحة/طباعة احترافي موحّد لكل ورقة (نفس معايير تاب الدخل الشامل):
+// إخفاء خطوط الشبكة، عدم ضغط الأرقام في صفحة واحدة، توسيط أفقي، تكرار رأس
+// الجدول في كل صفحة مطبوعة، تجميد الصفوف العلوية، وتذييل صفحة برقم الصفحة.
+// ملاحظة: يجب ترك مسافة بعد رمز حجم الخط (&8) قبل أي نص — التصاقه برقم عربي
+// شرقي يُحدث عطلاً في محرك إكسل يُظهر النص التالي بحجم ضخم يغطي الورقة.
+function _plSetupPage(ws, genDate, company, headerRowNum) {
+  ws.pageSetup.paperSize          = 9;
+  ws.pageSetup.orientation        = 'landscape';
+  ws.pageSetup.fitToPage          = true;
+  ws.pageSetup.fitToWidth         = 1;
+  ws.pageSetup.fitToHeight        = 0;
+  ws.pageSetup.horizontalCentered = true;
+  ws.pageSetup.showGridLines      = false;
+  ws.pageSetup.margins = { left:0.5, right:0.5, top:0.75, bottom:0.6, header:0.3, footer:0.3 };
+  ws.pageSetup.printTitlesRow = `1:${headerRowNum}`;
+  ws.headerFooter.oddFooter =
+    `&L&8 ${genDate}&C&8 ${(company || 'قائمة الدخل').replace(/&/g,'&&')} — سري للاستخدام الداخلي&R&8 صفحة &P من &N`;
+  ws.views = [{ rightToLeft:true, showGridLines:false, state:'frozen', ySplit: headerRowNum }];
+}
+
+// إطار خارجي كحلي حول نطاق الجدول بالكامل + فواصل رأسية بين الأعمدة
+function _plBoxRange(ws, fromRow, toRow, colCount) {
+  const bdr = (s,a) => ({ style:s, color:{ argb:a } });
+  for (let r = fromRow; r <= toRow; r++) {
+    const row = ws.getRow(r);
+    for (let c = 1; c <= colCount; c++) {
+      const cell = row.getCell(c);
+      const b = { ...cell.border };
+      if (c > 1) b.left = bdr('thin', 'FF142B45');
+      if (r === fromRow) b.top = bdr('medium', 'FF0A2040');
+      if (r === toRow)   b.bottom = bdr('medium', 'FF0A2040');
+      cell.border = b;
+    }
+    row.getCell(1).border      = { ...row.getCell(1).border,      left:  bdr('medium','FF0A2040') };
+    row.getCell(colCount).border = { ...row.getCell(colCount).border, right: bdr('medium','FF0A2040') };
+  }
+}
+
 async function exportPLExcel() {
   if (typeof ExcelJS === 'undefined') { alert('مكتبة ExcelJS لم تُحمَّل بعد'); return; }
   const period = (document.getElementById('pl-period-sel')||{}).value||'all';
@@ -422,22 +476,26 @@ async function exportPLExcel() {
   const c  = aggregatePL(plMonths);
   const cp = getPriorPeriodPL(period) ? aggregatePL(getPriorPeriodPL(period)) : null;
   const periodLabel = period === 'all' ? 'كل الفترة' : period === 'ytd' ? `السنة ${CUR_Y()}` : period;
+  const company = State.get('companyName') || '';
+  const genDate = new Date().toLocaleDateString('ar-SA', {year:'numeric',month:'long',day:'numeric'});
 
-  const wb = new ExcelJS.Workbook(); wb.creator = 'MekSoft Expenses Dashboard';
+  const wb = new ExcelJS.Workbook(); wb.creator = 'MekSoft ERP Dashboard';
 
   const hdr = (ws, cols) => {
     const row = ws.addRow(cols.map(c => c.h));
     row.eachCell(cell => { cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF1A4A8A'}}; cell.font={bold:true,color:{argb:'FFFFFFFF'},size:10}; cell.alignment={horizontal:'center'}; });
     cols.forEach((c, i) => { ws.getColumn(i+1).width = c.w||16; });
+    row.height = 20;
   };
 
   // Sheet 1: قائمة الدخل
-  const ws1 = wb.addWorksheet('قائمة الدخل'); ws1.views=[{rightToLeft:true}];
-  ws1.addRow([`قائمة الدخل — ${periodLabel}`]).getCell(1).font={bold:true,size:13,color:{argb:'FF1A4A8A'}};
+  const ws1 = wb.addWorksheet('قائمة الدخل');
+  ws1.addRow([`${company ? company + ' — ' : ''}قائمة الدخل — ${periodLabel}`]).getCell(1).font={bold:true,size:13,color:{argb:'FF1A4A8A'}};
   ws1.addRow([]);
   const s1Cols = cp
     ? [{h:'البيان',w:35},{h:'الفترة الحالية',w:18},{h:'% إيراد',w:12},{h:'الفترة السابقة',w:18},{h:'Δ المبلغ',w:18},{h:'Δ %',w:12}]
     : [{h:'البيان',w:35},{h:'المبلغ',w:18},{h:'% إيراد',w:12}];
+  const s1HeaderRow = ws1.rowCount + 1;
   hdr(ws1, s1Cols);
   const addStmt = (lbl, cur, prev, isNeg) => {
     const v = isNeg ? -cur : cur; const pv = prev != null ? (isNeg ? -prev : prev) : null;
@@ -457,19 +515,29 @@ async function exportPLExcel() {
   addStmt('ربح التشغيل قبل الفوائد (EBIT)', c.ebit, cp?.ebit).font={bold:true};
   ws1.addRow(['تكاليف التمويل']).getCell(1).font={bold:true,color:{argb:'FF8A1010'}};
   addStmt('(-) فوائد بنكية', c.fin, cp?.fin, true);
-  addStmt(c.netProfit>=0?'صافي الربح':'صافي الخسارة', c.netProfit, cp?.netProfit).font={bold:true,size:11};
+  const finalRow1 = addStmt(c.netProfit>=0?'صافي الربح':'صافي الخسارة', c.netProfit, cp?.netProfit);
+  finalRow1.font = {bold:true,size:11};
+  finalRow1.eachCell(cell => { cell.border = { ...cell.border, top: {style:'double',color:{argb:'FF0A2040'}} }; });
+
+  _plSetupPage(ws1, genDate, company, s1HeaderRow);
+  _plBoxRange(ws1, s1HeaderRow, ws1.rowCount, s1Cols.length);
 
   // Sheet 2: التفصيل الشهري
-  const ws2 = wb.addWorksheet('التفصيل الشهري'); ws2.views=[{rightToLeft:true}];
-  ws2.addRow([`الأداء الشهري — ${periodLabel}`]).getCell(1).font={bold:true,size:13,color:{argb:'FF1A4A8A'}};
+  const ws2 = wb.addWorksheet('التفصيل الشهري');
+  ws2.addRow([`${company ? company + ' — ' : ''}الأداء الشهري — ${periodLabel}`]).getCell(1).font={bold:true,size:13,color:{argb:'FF1A4A8A'}};
   ws2.addRow([]);
-  hdr(ws2,[{h:'الشهر',w:14},{h:'الإيرادات',w:16},{h:'ت.المبيعات',w:16},{h:'مجمل الربح',w:16},{h:'ه.إجمالي%',w:13},{h:'م.تشغيلية',w:16},{h:'EBIT',w:16},{h:'فوائد',w:14},{h:'صافي الربح',w:16},{h:'ه.صافي%',w:13}]);
+  const s2Cols = [{h:'الشهر',w:14},{h:'الإيرادات',w:16},{h:'ت.المبيعات',w:16},{h:'مجمل الربح',w:16},{h:'ه.إجمالي%',w:13},{h:'م.تشغيلية',w:16},{h:'EBIT',w:16},{h:'فوائد',w:14},{h:'صافي الربح',w:16},{h:'ه.صافي%',w:13}];
+  const s2HeaderRow = ws2.rowCount + 1;
+  hdr(ws2, s2Cols);
   plMonths.forEach(m => {
     const tc=(m.cogs||0)+(m.otherCost||0); const gp=m.revenue-tc;
     const co=(m.sal||0)+(m.rent||0)+(m.maint||0)+(m.sell||0)+(m.dist||0)+(m.adm||0)+(m.char||0)+(m.oth||0);
     const ebit=gp-co; const np=ebit-(m.fin||0);
     ws2.addRow([m.label||m.month, m.revenue, tc, gp, m.revenue?(gp/m.revenue*100).toFixed(1)+'%':'—', co, ebit, m.fin||0, np, m.revenue?(np/m.revenue*100).toFixed(1)+'%':'—']);
   });
+
+  _plSetupPage(ws2, genDate, company, s2HeaderRow);
+  _plBoxRange(ws2, s2HeaderRow, ws2.rowCount, s2Cols.length);
 
   const buf = await wb.xlsx.writeBuffer();
   const a = document.createElement('a'); a.href=URL.createObjectURL(new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));

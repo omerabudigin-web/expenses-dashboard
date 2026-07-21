@@ -90,6 +90,14 @@ td.num,th.num{text-align:left;font-variant-numeric:tabular-nums}
 .pl-margin-badge{display:inline-block;padding:1px 7px;border-radius:8px;font-size:.72rem;font-weight:600}
 .pl-margin-pos{background:#0d3020;color:#4ada8e}
 .pl-margin-neg{background:#3a1010;color:#da4a4a}
+/* إطار احترافي خاص بجدولي تاب "قائمة الدخل" القديم فقط — #pl-statement بمعرّف
+   مخصص لأن .pl-stmt مشتركة مع تابات التدفقات النقدية، فلا نلمسها مباشرة */
+#pl-statement{border:2px solid #2a4a7a}
+#pl-statement th,#pl-statement td{border-left:1px solid #142b45}
+#pl-statement th:last-child,#pl-statement td:last-child{border-left:none}
+#tab-pl .pl-monthly-tbl{border:2px solid #2a4a7a}
+#tab-pl .pl-monthly-tbl th,#tab-pl .pl-monthly-tbl td{border-left:1px solid #142b45}
+#tab-pl .pl-monthly-tbl th:last-child,#tab-pl .pl-monthly-tbl td:last-child{border-left:none}
 /* â”€â”€ Transaction comparison table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .plc-txn-tbl{width:100%;border-collapse:collapse;font-size:.8rem}
 .plc-txn-tbl th{color:#5090b0;font-weight:600;padding:5px 10px;text-align:right;border-bottom:1px solid #1e3040;white-space:nowrap}
