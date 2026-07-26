@@ -38,6 +38,8 @@ const RR_CSS = `<style>
 .rr-date { color:#8aa0c0; font-size:.78rem; margin-top:8px; }
 .rr-badge { display:inline-block; background:#13284a; border:1px solid #C6A04A; color:#C6A04A; font-size:.68rem; font-weight:700; padding:2px 10px; border-radius:12px; margin-right:8px; }
 .rr-exec { color:#e8d8a8; font-size:.92rem; font-weight:700; margin-top:14px; line-height:1.7; background:rgba(198,160,74,.08); border-right:3px solid #C6A04A; padding:10px 14px; border-radius:4px; }
+.rr-clarify { color:#dce8f8; font-size:.84rem; font-weight:700; line-height:1.8; background:rgba(91,174,240,.08); border-right:3px solid #5baef0; padding:10px 14px; border-radius:4px; margin-bottom:14px; }
+.rr-clarify strong { color:#5baef0; }
 
 .rr-body { padding: 24px 32px; color:#c8d8e8; }
 .rr-kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:24px; }
@@ -106,6 +108,7 @@ function _rrBuildShell() {
     <div id="rr-why" class="rr-section"></div>
     <div class="rr-section">
       <div class="rr-sec-title">📈 منحنى DSCR الشهري — أكتوبر 2025 حتى الآن</div>
+      <div id="rr-clarify"></div>
       <div id="rr-chart"></div>
       <div id="rr-julytbl"></div>
     </div>
@@ -155,6 +158,7 @@ function _rrRenderAll() {
   _rrRenderExec();
   _rrRenderKPIs();
   _rrRenderWhy();
+  _rrRenderClarify();
   _rrRenderChart();
   _rrRenderJulyTable();
   _rrRenderMaturities();
@@ -239,6 +243,29 @@ function _rrRenderWhy() {
       </ol>
     </div>
   </div>`;
+}
+
+// Cumulative (KPI cards) vs monthly (chart) DSCR use different bases — flagged
+// explicitly so a bank reader doesn't read the low July monthly point against
+// the higher cumulative figure as a contradiction. Both numbers below are
+// live-computed from the same fetched data as the KPI cards and chart, not
+// hardcoded, so this note can never silently drift out of sync with them.
+function _rrRenderClarify() {
+  const el = document.getElementById('rr-clarify');
+  if (!el || !_rrData) return;
+  const { dscr, monthly } = _rrData;
+  const a = dscr.companies.abaad, w = dscr.companies.wissam;
+  const combinedOP = a.operatingProfit + w.operatingProfit;
+  const combinedDS = a.totalDebtService + w.totalDebtService;
+  const combinedDSCR = combinedDS ? combinedOP / combinedDS : null;
+  const months = monthly.months;
+  const last = months[months.length - 1];
+  const period = months.length ? `${months[0].month} – ${months[months.length-1].month}` : '';
+  el.innerHTML = `
+    البطاقات أعلاه: DSCR <strong>تراكمي</strong> للفترة ${esc(period)} (الموحَّد ${_rrX(combinedDSCR)}).
+    الرسم أدناه: DSCR <strong>شهري منفرد</strong> لكل شهر على حدة.
+    انخفاض ${esc(last ? last.month : '')} (الموحَّد ${_rrX(last ? last.combined.dscr : null)}) سببه استحقاق بالوني وقع في ذلك الشهر تحديداً —
+    نقطة معزولة لا اتجاه، والتراكمي ${_rrX(combinedDSCR)} هو المؤشر المعتمد للقدرة على السداد.`;
 }
 
 // ── SVG monthly DSCR chart — fixed y-domain with clipping for extreme outliers
