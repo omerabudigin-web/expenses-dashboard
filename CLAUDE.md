@@ -89,3 +89,5 @@ The project ships a [.mcp.json](.mcp.json) that registers the `mssql-mcp-node` M
 Server: `MekSoftServer` (SQL Server 2022 Express, port 1433, user `MCP_ReadOnly`). Requires Hamachi VPN to be active.
 
 **Before querying the ERP schema**, invoke the `/meksoft-erp` skill — it loads the full table map, join patterns, lookup values, and common query examples for MekSoftDb1.
+
+المواصفات المعتمدة تُكتب في docs/ بيد Claude Code مباشرة، وتُقرأ من القرص قبل أي بناء.
