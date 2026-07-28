@@ -351,7 +351,10 @@ function _vrRenderBody(co) {
       <div class="vr-ref-r"><span class="vr-ref-lbl">ضريبة مردودات مبيعات:</span><span class="vr-ref-val">${_vrFmt(ref.returnsVAT)}</span></div>
       <div class="vr-ref-r"><span class="vr-ref-lbl">فواتير مشتريات:</span><span class="vr-ref-val">${_vrFmt(ref.grossPurchBase)}</span></div>
       <div class="vr-ref-r"><span class="vr-ref-lbl">ضريبة مشتريات (فواتير):</span><span class="vr-ref-val">${_vrFmt(ref.jvInvVAT)}</span></div>
+      <div class="vr-ref-r"><span class="vr-ref-lbl">مردودات مشتريات:</span><span class="vr-ref-val">${_vrFmt(ref.purchReturnsBase)}</span></div>
+      <div class="vr-ref-r"><span class="vr-ref-lbl">ضريبة مردودات مشتريات:</span><span class="vr-ref-val">${_vrFmt(ref.purchReturnsVAT)}</span></div>
       <div class="vr-ref-r"><span class="vr-ref-lbl">ضريبة قيود يدوية (ح.64):</span><span class="vr-ref-val vr-ref-hi">${_vrFmt(ref.jvManualVAT)}</span></div>
+      <div class="vr-ref-r"><span class="vr-ref-lbl">خصم يدوي على ضريبة مدخلات (إشعارات خصم غير مرتبطة بتسوية):</span><span class="vr-ref-val vr-ref-hi">${_vrFmt(ref.jvManualCreditVAT)}</span></div>
       <div class="vr-ref-r"><span class="vr-ref-lbl">إجمالي مدخلات (خانة 7):</span><span class="vr-ref-val vr-ref-hi">${_vrFmt(r.r7.vat)}</span></div>
     </div>
     <div style="font-size:.65rem;color:#4a6080;margin-top:6px">
@@ -691,7 +694,10 @@ async function _vrExcelBuild(co) {
     ['ضريبة مردودات مبيعات',           ref.returnsVAT,     false],
     ['فواتير مشتريات (وعاء)',           ref.grossPurchBase, false],
     ['ضريبة مشتريات (فواتير فقط)',      ref.jvInvVAT,       false],
+    ['مردودات مشتريات (وعاء)',          ref.purchReturnsBase, false],
+    ['ضريبة مردودات مشتريات',           ref.purchReturnsVAT,  false],
     ['ضريبة قيود يدوية ح.64',          ref.jvManualVAT,    true ],
+    ['خصم يدوي على ضريبة مدخلات (ح.64)', ref.jvManualCreditVAT, true ],
     ['إجمالي ضريبة مدخلات — خانة 7',  r.r7.vat,           true ],
   ].forEach(([lbl, val, hl], i) => {
     const bg_ = i % 2 === 0 ? R1 : R2;

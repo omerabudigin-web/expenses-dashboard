@@ -90,7 +90,6 @@ async function getVatReturn(company, from, to) {
        * Manual JV debits to ح.64 = input VAT on small purchases that bypass
        * the PurchaseInvoice module (transport, customs, rent, maintenance …).
        * We take ONLY debits not linked to any purchase/sales document JV.
-       * The credits on this account are ZATCA clearing entries — excluded.
        */
       SELECT
         ISNULL(SUM(jd.Debit), 0) AS jv_vat
@@ -107,6 +106,37 @@ async function getVatReturn(company, from, to) {
         AND NOT EXISTS (SELECT 1 FROM PurchaseDebitNote_JournalVoucherHeader  x WHERE x.JournalVoucherHeaderID = jd.HeaderID)
         AND NOT EXISTS (SELECT 1 FROM SalesInvoice_JournalVoucherHeader     x WHERE x.JournalVoucherHeaderID = jd.HeaderID)
         AND NOT EXISTS (SELECT 1 FROM SalesReturn_JournalVoucherHeader      x WHERE x.JournalVoucherHeaderID = jd.HeaderID)
+    ),
+    MJ_64_CR AS (
+      /*
+       * Manual JV CREDITS to ح.64 = genuine input-VAT-reducing adjustments
+       * (supplier discount/price-correction notices — "إشعار خصم" — posted
+       * directly against ح.64, not linked to any PurchaseInvoice/Return).
+       * These are real and must be subtracted from input VAT.
+       *
+       * Distinguished from true ZATCA settlement clearing entries ("تسوية
+       * القيمة المضافة"): every such settlement JV found live always pairs
+       * a ح.64 credit with a ح.88 debit *in the same voucher* (plus a credit
+       * to the payable account 2010204001) — verified across 8 monthly
+       * entries. A credit to ح.64 with NO same-header ح.88 debit is not a
+       * clearing entry and must be included here.
+       */
+      SELECT
+        ISNULL(SUM(jd.Credit), 0) AS jv_vat_credit
+      FROM JournalVoucherDetail jd
+      JOIN JournalVoucherHeader jh ON jh.ID = jd.HeaderID
+      CROSS JOIN vat_accts va
+      WHERE jd.AccountChart = va.id64
+        AND jd.Credit > 0
+        AND jh.TransactionDate >= @from
+        AND jh.TransactionDate <  DATEADD(day, 1, CAST(@to AS date))
+        AND NOT EXISTS (SELECT 1 FROM PurchaseInvoice_JournalVoucherHeader  x WHERE x.JournalVoucherHeaderID = jd.HeaderID)
+        AND NOT EXISTS (SELECT 1 FROM PurchaseReturn_JournalVoucherHeader   x WHERE x.JournalVoucherHeaderID = jd.HeaderID)
+        AND NOT EXISTS (SELECT 1 FROM PurchaseCreditNote_JournalVoucherHeader x WHERE x.JournalVoucherHeaderID = jd.HeaderID)
+        AND NOT EXISTS (SELECT 1 FROM PurchaseDebitNote_JournalVoucherHeader  x WHERE x.JournalVoucherHeaderID = jd.HeaderID)
+        AND NOT EXISTS (SELECT 1 FROM SalesInvoice_JournalVoucherHeader     x WHERE x.JournalVoucherHeaderID = jd.HeaderID)
+        AND NOT EXISTS (SELECT 1 FROM SalesReturn_JournalVoucherHeader      x WHERE x.JournalVoucherHeaderID = jd.HeaderID)
+        AND NOT EXISTS (SELECT 1 FROM JournalVoucherDetail zc WHERE zc.HeaderID = jd.HeaderID AND zc.AccountChart = va.id88 AND zc.Debit > 0)
     )
     SELECT
       -- OUTPUT (sales net of returns, all from invoice flow)
@@ -121,11 +151,13 @@ async function getVatReturn(company, from, to) {
       -- INPUT (additional from manual JVs)
       MJ_64.jv_vat / 0.15           AS r7_jv_base,
       MJ_64.jv_vat                  AS r7_jv_vat,
+      MJ_64_CR.jv_vat_credit / 0.15 AS r7_jv_credit_base,
+      MJ_64_CR.jv_vat_credit        AS r7_jv_credit_vat,
       -- COMBINED INPUT
-      (PI.r7_base - PR.r7_base) + MJ_64.jv_vat / 0.15  AS r7_base,
-      (PI.r7_vat  - PR.r7_vat)  + MJ_64.jv_vat          AS r7_vat,
+      (PI.r7_base - PR.r7_base) + MJ_64.jv_vat / 0.15 - MJ_64_CR.jv_vat_credit / 0.15  AS r7_base,
+      (PI.r7_vat  - PR.r7_vat)  + MJ_64.jv_vat        - MJ_64_CR.jv_vat_credit          AS r7_vat,
       PI.r9_base - PR.r9_base       AS r9_base,
-      (PI.total_base - PR.total_base) + MJ_64.jv_vat / 0.15 AS r11_base,
+      (PI.total_base - PR.total_base) + MJ_64.jv_vat / 0.15 - MJ_64_CR.jv_vat_credit / 0.15 AS r11_base,
       -- REFERENCE (for audit reconciliation)
       SI.total_base AS ref_gross_sales_base,
       SI.total_vat  AS ref_gross_sales_vat,
@@ -135,8 +167,9 @@ async function getVatReturn(company, from, to) {
       PI.total_vat  AS ref_gross_purch_vat,
       PR.total_base AS ref_purch_ret_base,
       PR.total_vat  AS ref_purch_ret_vat,
-      MJ_64.jv_vat  AS ref_jv_input_vat
-    FROM SI, SR, PI, PR, MJ_64`;
+      MJ_64.jv_vat  AS ref_jv_input_vat,
+      MJ_64_CR.jv_vat_credit AS ref_jv_credit_vat
+    FROM SI, SR, PI, PR, MJ_64, MJ_64_CR`;
 
   const result = await pool.request()
     .input('from', from)
@@ -186,6 +219,8 @@ async function getVatReturn(company, from, to) {
       jvInvVAT:         round2(d.r7_inv_vat),
       jvManualBase:     round2(d.r7_jv_base),
       jvManualVAT:      round2(d.ref_jv_input_vat),
+      jvManualCreditBase: round2(d.r7_jv_credit_base),
+      jvManualCreditVAT:  round2(d.ref_jv_credit_vat),
     },
   };
 }
