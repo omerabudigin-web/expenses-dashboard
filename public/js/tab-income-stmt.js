@@ -98,6 +98,13 @@ function initIncomeStatement() {
     ['is-from', 'is-to'].forEach(id => {
       document.getElementById(id).addEventListener('change', () => { quickSel.value = ''; });
     });
+    // Changing "من" alone collapses the range to that single month (the common case),
+    // so "إلى" doesn't silently stay pinned at its old value (e.g. the current month
+    // from the "كل الفترة" default) and widen the query far beyond the intended month.
+    // Extending to a multi-month range remains possible by then also changing "إلى".
+    document.getElementById('is-from').addEventListener('change', () => {
+      document.getElementById('is-to').value = document.getElementById('is-from').value;
+    });
   }
 
   document.getElementById('is-run').addEventListener('click', () => {
