@@ -20,7 +20,7 @@ const AR_MONTHS = ['','يناير','فبراير','مارس','أبريل','ما�
  * No start-date filter: fetches full history so JS handles all period filtering.
  * Periodic COGS is computed on the client using PI document values:
  *   periodic_cogs = BI_periodic + (purchases_av − disc_earned − returns_av + inv_adj) − EI_periodic
- *   where EI_periodic = Σ(max(0, cum_qty) × avg_unit_cost) via InventoryTransactionView
+ *   where EI_periodic = Σ(max(0, cum_qty) × avg_unit_cost) via InventoryTransactionOnlyIncludedView
  * Periodic COGS differs from perpetual COGS due to landed costs and AVCO vs ERP cost divergence.
  */
 async function getPLComparisonData(dbName) {
@@ -230,8 +230,15 @@ async function getPLComparisonData(dbName) {
   `);
 
   // ── 7. Periodic EI — per-item running qty × all-time avg PI cost ──────────
-  //     Quantities from InventoryTransactionView (accurate — not distorted by
-  //     FallbackCostInBase).  Items with negative balance are excluded (= 0 EI).
+  //     Quantities from InventoryTransactionOnlyIncludedView — the 7 screens that
+  //     physically move stock (DeliverGoods/ReceiptGoods/Transfer*/Increase/DecreaseStock/
+  //     OpeningStock). InventoryTransactionView also includes document-level screens
+  //     (PurchaseInvoice, SalesInvoice, PurchaseOrder, Quotation, PurchaseReturn,
+  //     SalesReturn) whose quantities duplicate or are unrelated to the physical
+  //     movement already counted via ReceiptGoods/DeliverGoods — using it here inflated
+  //     cum_qty by roughly the entire document-side volume (verified live: DB1 all-time
+  //     SUM(GroupQuantity) is -256,939 on InventoryTransactionView vs +46,406 on
+  //     InventoryTransactionOnlyIncludedView). Items with negative balance are excluded (= 0 EI).
   const eiPerRes = await pool.request().query(`
     WITH
     avg_cost AS (
@@ -245,7 +252,7 @@ async function getPLComparisonData(dbName) {
     itv_mo AS (
       SELECT YEAR(TransactionDate) Yr, MONTH(TransactionDate) Mo, Item,
              SUM(GroupQuantity) monthly_qty
-      FROM InventoryTransactionView
+      FROM InventoryTransactionOnlyIncludedView
       GROUP BY YEAR(TransactionDate), MONTH(TransactionDate), Item
     ),
     itv_run AS (

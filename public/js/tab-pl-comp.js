@@ -35,7 +35,10 @@ function _plcStartCountdown(periodLabel, revenue) {
 
 const PLCOMP_OPENING = {
   MekSoftDb1: { month: '2025-09', inv_balance: 4061406.11, ei_periodic: 3637611.23 },
-  MekSoftDb2: { month: '2025-08', inv_balance: 0,          ei_periodic: 0           },
+  // Real opening JV (#1267, "رصيد افتتاحي") posted 2025-09-30 to 1030201001: 494,335.55 ledger,
+  // 656,331.66 periodic AVCO (267.851 units, OpeningStock ScreenID 71) — Sept 2025 had zero
+  // other activity, so this is the pure opening valuation, mirroring the DB1 pattern above.
+  MekSoftDb2: { month: '2025-09', inv_balance: 494335.55,  ei_periodic: 656331.66  },
 };
 function plcOpeningFor(db) { return PLCOMP_OPENING[db] || PLCOMP_OPENING.MekSoftDb1; }
 const _PLC_AR_MO = ['','يناير','فبراير','مارس','أبريل','مايو','يونيو',
