@@ -38,6 +38,7 @@
   else if (name === 'sales-inv') renderSalesInvoicesTab();
   else if (name === 'ccc')       renderCCCTab();
   else if (name === 'forecast')  renderForecastTab();
+  else if (name === 'negstock')  renderNegativeStockAudit();
 }
 
 // ── Connection status indicator ───────────────────────────────────────────────

@@ -34,6 +34,7 @@ const { getItemProfitability }                                 = require('./quer
 const { getARCollection }                                      = require('./queries/ar-collection');
 const { getIntercoRecon }                                      = require('./queries/interco-recon');
 const { getDataIntegrityCheck }                                = require('./queries/data-integrity');
+const { getNegativeStockAudit }                                = require('./queries/negative-stock-audit');
 const { getVatReturn }                                         = require('./queries/vat-return');
 const { getExecutiveSummary }                                  = require('./queries/executive');
 const dscrRoute                                                = require('./routes/dscr');
@@ -582,6 +583,22 @@ app.get('/api/income-statement-tree', async (req, res) => {
     res.json(rows);
   } catch (err) {
     console.error('[api/income-statement-tree]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /api/negative-stock-audit?from=&to= — تدقيق عيب تكلفة المخزون السالب ──
+app.get('/api/negative-stock-audit', async (req, res) => {
+  const dbName = resolveDb(req.query);
+  const from = req.query.from || START_DATE;
+  const to   = /^\d{4}-\d{2}-\d{2}$/.test(req.query.to || '') ? req.query.to : new Date().toISOString().slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from))
+    return res.status(400).json({ error: 'from must be YYYY-MM-DD' });
+  try {
+    const data = await getNegativeStockAudit(dbName, from, to);
+    res.json(data);
+  } catch (err) {
+    console.error('[api/negative-stock-audit]', err.message);
     res.status(500).json({ error: err.message });
   }
 });
