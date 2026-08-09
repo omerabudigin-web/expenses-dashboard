@@ -12,6 +12,12 @@
 <body>
 
 <div id="conn-banner" class="conn-banner">⚠ انقطع الاتصال بقاعدة البيانات — جاري إعادة الاتصال…</div>
+<div id="negstock-banner" class="negstock-banner">
+  <span class="ns-msg">🚨</span>
+  <span id="ns-banner-text"></span>
+  <button id="ns-banner-view">عرض التفاصيل</button>
+  <button class="ns-dismiss" id="ns-banner-dismiss" title="إخفاء">✕</button>
+</div>
 
 <div class="hdr">
   <div>
@@ -66,7 +72,7 @@
   <div class="tab" data-tab="stock">رصيد المخزون 📦</div>
   <div class="tab" data-tab="inv-aging">أعمار المخزون ⏳</div>
   <div class="tab" data-tab="item-profit">ربحية الصنف 💹</div>
-  <div class="tab" data-tab="negstock">🚨 تدقيق عيب المخزون السالب</div>
+  <div class="tab" data-tab="negstock"><span id="ns-nav-badge" class="nav-badge" style="display:none"></span>🚨 تدقيق عيب المخزون السالب</div>
   <div class="tab" data-tab="inventory">تحليل المخزون 🔄</div>
   <div class="tab" data-tab="manufacturing">التصنيع 🏭</div>
   <div class="tab" data-tab="coils">الكويلات 🔩</div>
@@ -1067,6 +1073,7 @@
 <script src="/js/tab-ar-collection.js"></script>
 <script src="/js/tab-interco-recon.js"></script>
 <script src="/js/tab-negative-stock.js"></script>
+<script src="/js/negstock-alert.js"></script>
 <script src="/js/tab-vat-return.js"></script>
 <script src="/js/tab-dscr.js"></script>
 <script src="/js/tab-aging.js"></script>
