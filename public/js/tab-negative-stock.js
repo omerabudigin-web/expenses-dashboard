@@ -31,7 +31,25 @@ function _nsaMount() {
       أو رقم سالب — بدل التكلفة الفعلية. <strong>تأكَّد هذا بفحص كل فاتورة متأثرة: كان رصيد الصنف سالباً
       وقت البيع في 100% من الحالات.</strong> منهجية التصحيح: استبدال تكلفة كل فاتورة متأثرة بمتوسط تكلفة
       الشراء الفعلي للصنف (من فواتير الشراء) — تقدير مبني على بيانات شراء حقيقية، وليس محاكاة كاملة لمحرك
-      التكلفة في النظام.
+      التكلفة في النظام. <strong style="color:#4ada8e">الفواتير اللي اتصححت بالفعل عن طريق مردود مبيعات
+      فعلي (العميل رجّع البضاعة) مُستبعدة تلقائياً من كل الحسابات أدناه</strong> — تحديدها عن طريق الربط
+      الرسمي <code>SalesReturnHeader.SalesInvoiceId</code>، مش تخمين بتطابق المبلغ (لأن فاتورتين مختلفتين
+      ممكن يتصادف تطابق نفس مبلغ التشويه بالصدفة مع مردود لواحدة منهم بس).
+    </div>
+
+    <div id="nsa-resolved-wrap" style="display:none;background:#0a2818;border:1px solid #1e5a3a;border-radius:8px;
+      padding:14px 18px;margin:12px 0;font-size:.82rem;color:#a0d8b8">
+      <div id="nsa-resolved-summary" style="font-weight:600;margin-bottom:8px"></div>
+      <div style="overflow-x:auto">
+        <table class="tb-tbl" id="nsa-resolved-table">
+          <thead><tr>
+            <th>تاريخ الفاتورة</th><th>رقم الفاتورة</th><th>JV</th>
+            <th class="num">الإيراد</th><th class="num">التكلفة المسجَّلة وقتها</th>
+            <th>تاريخ المردود</th><th>رقم المردود</th>
+          </tr></thead>
+          <tbody id="nsa-resolved-tbody"></tbody>
+        </table>
+      </div>
     </div>
 
     <div id="nsa-kpis" class="kpis"></div>
@@ -147,8 +165,32 @@ function _renderNSA() {
   _renderNSAKPIs();
   _renderNSAChart();
   _renderNSAMonthlyTable();
+  _renderNSAResolved();
   _renderNSAWissam();
   _renderNSAInvoiceTable();
+}
+
+function _renderNSAResolved() {
+  const wrap = document.getElementById('nsa-resolved-wrap');
+  const rows = _nsaData.resolvedByReturn || [];
+  if (!wrap) return;
+  if (!rows.length) { wrap.style.display = 'none'; return; }
+
+  wrap.style.display = 'block';
+  const revSum = rows.reduce((s, r) => s + r.revenue, 0);
+  document.getElementById('nsa-resolved-summary').textContent =
+    `✅ ${rows.length} فاتورة كانت مؤهلة للتنبيه لكن اتصححت بالفعل عبر مردود مبيعات فعلي — مُستبعدة من كل الأرقام أعلاه (إجمالي إيرادها ${fmt(revSum, 2)} ر.س)`;
+
+  document.getElementById('nsa-resolved-tbody').innerHTML = rows.map(r => `
+    <tr class="tb-row">
+      <td style="white-space:nowrap">${esc(r.date)}</td>
+      <td>${r.invId}</td>
+      <td>${r.jvId}</td>
+      <td class="num">${fmt(r.revenue, 2)}</td>
+      <td class="num">${fmt(r.reportedCogs, 2)}</td>
+      <td style="white-space:nowrap">${esc(r.returnDate)}</td>
+      <td>${r.returnId}</td>
+    </tr>`).join('');
 }
 
 function _renderNSAWissam() {

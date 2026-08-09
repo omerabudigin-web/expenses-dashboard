@@ -26,12 +26,24 @@ const AR_MONTHS = ['','يناير','فبراير','مارس','أبريل','ما�
  * This is an estimate (not a re-run of the ERP's perpetual-costing engine) but is
  * directly traceable to real purchase prices — the same method used to hand-verify
  * item #2081 (حديد مجدول راجحي 16مم×12م) against its October 2025 purchase history.
+ *
+ * Already-resolved exclusion: some flagged invoices were already fully reversed by a
+ * genuine customer SalesReturn (goods physically came back — both revenue and the bad
+ * COGS get credited back together in the return's own JV, net effect already zero in
+ * the ledger). These must NOT be corrected/excluded a second time — doing so double-
+ * counts the same distortion (once via the original invoice, once via its own already-
+ * self-canceling return) and badly skews the result, most visibly on the smaller-
+ * revenue company where a couple of large reversed invoices can swing the margin by
+ * dozens of points. Detected via the authoritative SalesReturnHeader.SalesInvoiceId
+ * link (NOT amount-coincidence matching — verified live that two flagged invoices can
+ * share an identical COGS distortion value by pure coincidence with an unrelated
+ * return, so matching on amount alone produces false positives).
  */
 
 async function getNegativeStockAudit(dbName, from, to) {
   const pool = await getPool(dbName);
 
-  const [flaggedRes, monthlyRes] = await Promise.all([
+  const [flaggedRes, resolvedRes, monthlyRes] = await Promise.all([
     pool.request()
       .input('from', sql.Date, from)
       .input('to',   sql.Date, to)
@@ -53,8 +65,9 @@ async function getNegativeStockAudit(dbName, from, to) {
           GROUP BY sih.ID, sjv.JournalVoucherHeaderID, sih.TransactionDate, sih.Customer, sih.SalesMan
         ),
         Flagged AS (
-          SELECT * FROM Invoices
-          WHERE revenue <> 0 AND (reportedCogs < 0 OR reportedCogs > revenue * 2)
+          SELECT i.* FROM Invoices i
+          WHERE i.revenue <> 0 AND (i.reportedCogs < 0 OR i.reportedCogs > i.revenue * 2)
+            AND NOT EXISTS (SELECT 1 FROM SalesReturnHeader srh WHERE srh.SalesInvoiceId = i.invId)
         ),
         ItemAvgCost AS (
           SELECT pid.Item,
@@ -86,6 +99,31 @@ async function getNegativeStockAudit(dbName, from, to) {
       .input('from', sql.Date, from)
       .input('to',   sql.Date, to)
       .query(`
+        WITH Invoices AS (
+          SELECT
+            sih.ID              AS invId,
+            sjv.JournalVoucherHeaderID AS jvId,
+            sih.TransactionDate AS dt,
+            SUM(CASE WHEN ac.Code LIKE '5%'       THEN jd.Credit - jd.Debit ELSE 0 END) AS revenue,
+            SUM(CASE WHEN ac.Code LIKE '4010101%' THEN jd.Debit - jd.Credit ELSE 0 END) AS reportedCogs
+          FROM SalesInvoice_JournalVoucherHeader sjv
+          JOIN SalesInvoiceHeader   sih ON sih.ID = sjv.SalesInvoiceHeaderID
+          JOIN JournalVoucherDetail jd  ON jd.HeaderID = sjv.JournalVoucherHeaderID
+          JOIN AccountChart         ac  ON ac.ID = jd.AccountChart
+          WHERE sih.TransactionDate >= @from AND sih.TransactionDate < DATEADD(day, 1, @to)
+          GROUP BY sih.ID, sjv.JournalVoucherHeaderID, sih.TransactionDate
+        )
+        SELECT i.invId, i.jvId, i.dt, i.revenue, i.reportedCogs,
+               srh.ID AS returnId, srh.TransactionDate AS returnDate
+        FROM Invoices i
+        JOIN SalesReturnHeader srh ON srh.SalesInvoiceId = i.invId
+        WHERE i.revenue <> 0 AND (i.reportedCogs < 0 OR i.reportedCogs > i.revenue * 2)
+        ORDER BY i.dt
+      `),
+    pool.request()
+      .input('from', sql.Date, from)
+      .input('to',   sql.Date, to)
+      .query(`
         SELECT
           YEAR(h.TransactionDate)  AS Yr,
           MONTH(h.TransactionDate) AS Mo,
@@ -100,6 +138,16 @@ async function getNegativeStockAudit(dbName, from, to) {
         ORDER BY Yr, Mo
       `),
   ]);
+
+  const resolvedByReturn = resolvedRes.recordset.map(r => ({
+    invId:      r.invId,
+    jvId:       r.jvId,
+    date:       r.dt.toISOString().slice(0, 10),
+    revenue:    +r.revenue || 0,
+    reportedCogs: +r.reportedCogs || 0,
+    returnId:   r.returnId,
+    returnDate: r.returnDate.toISOString().slice(0, 10),
+  }));
 
   const invoices = flaggedRes.recordset.map(r => {
     const reportedCogs  = +r.reportedCogs  || 0;
@@ -167,8 +215,9 @@ async function getNegativeStockAudit(dbName, from, to) {
   totals.netDistortion    = totals.asReportedProfit - totals.correctedProfit;
   totals.invoiceCount     = invoices.length;
   totals.absDistortion    = invoices.reduce((s, i) => s + Math.abs(i.distortion), 0);
+  totals.resolvedByReturnCount = resolvedByReturn.length;
 
-  return { db: dbName, from, to, invoices, monthly, totals };
+  return { db: dbName, from, to, invoices, monthly, totals, resolvedByReturn };
 }
 
 module.exports = { getNegativeStockAudit };
