@@ -5,6 +5,13 @@ const { getPool } = require('../db');
 const AR_MONTHS = ['','يناير','فبراير','مارس','أبريل','مايو','يونيو',
                    'يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
 
+// Same intercompany party map as server/index.js's IC_MAP — kept in sync manually
+// (DB1 أبعاد: وسام is Customer 109 / Supplier 3. DB2 وسام: أبعاد is Customer 3 / Supplier 2).
+const IC_MAP = {
+  MekSoftDb1: { icCustomerId: 109, icSupplierId: 3 },
+  MekSoftDb2: { icCustomerId: 3,   icSupplierId: 2 },
+};
+
 /*
  * Negative-stock costing defect audit.
  *
@@ -38,15 +45,31 @@ const AR_MONTHS = ['','يناير','فبراير','مارس','أبريل','ما�
  * link (NOT amount-coincidence matching — verified live that two flagged invoices can
  * share an identical COGS distortion value by pure coincidence with an unrelated
  * return, so matching on amount alone produces false positives).
+ *
+ * Custody-transfer exclusion: confirmed with the owner that most large intercompany
+ * invoices between أبعاد and وسام are not commercial sales at all — they're the same
+ * physical steel moving between the two related entities' custody, recorded as a
+ * matching sale/purchase pair at an identical price (no markup either direction).
+ * ~78% of large (>50,000) intercompany invoices have an exact-amount matching
+ * purchase in the other leg within days; the reciprocal "closing" purchase back in
+ * the ORIGINATING company's own book can be dated weeks earlier than the sale it
+ * closes out (verified: a July sale's matching buy-back purchase was dated late June).
+ * These pairs carry no real profit or loss, so a flagged invoice that's part of one
+ * is excluded here the same way an already-returned invoice is: matched by exact
+ * revenue amount against a same-company purchase from the intercompany supplier,
+ * within a 60-day window (wide enough to cover the observed lag, not exact-day only).
  */
 
 async function getNegativeStockAudit(dbName, from, to) {
   const pool = await getPool(dbName);
+  const ic = IC_MAP[dbName] || { icCustomerId: -1, icSupplierId: -1 };
 
-  const [flaggedRes, resolvedRes, monthlyRes] = await Promise.all([
+  const [flaggedRes, resolvedRes, custodyRes, monthlyRes] = await Promise.all([
     pool.request()
       .input('from', sql.Date, from)
       .input('to',   sql.Date, to)
+      .input('icCustomerId', sql.Int, ic.icCustomerId)
+      .input('icSupplierId', sql.Int, ic.icSupplierId)
       .query(`
         WITH Invoices AS (
           SELECT
@@ -68,6 +91,18 @@ async function getNegativeStockAudit(dbName, from, to) {
           SELECT i.* FROM Invoices i
           WHERE i.revenue <> 0 AND (i.reportedCogs < 0 OR i.reportedCogs > i.revenue * 2)
             AND NOT EXISTS (SELECT 1 FROM SalesReturnHeader srh WHERE srh.SalesInvoiceId = i.invId)
+            AND NOT (
+              i.customerId = @icCustomerId
+              AND EXISTS (
+                SELECT 1
+                FROM PurchaseInvoiceHeader pih
+                JOIN PurchaseInvoiceDetail pid ON pid.HeaderID = pih.ID
+                WHERE pih.Supplier = @icSupplierId
+                GROUP BY pih.ID, pih.TransactionDate
+                HAVING ABS(SUM(pid.Net) - i.revenue) < 1
+                   AND ABS(DATEDIFF(day, MIN(pih.TransactionDate), i.dt)) <= 60
+              )
+            )
         ),
         ItemAvgCost AS (
           SELECT pid.Item,
@@ -123,6 +158,48 @@ async function getNegativeStockAudit(dbName, from, to) {
     pool.request()
       .input('from', sql.Date, from)
       .input('to',   sql.Date, to)
+      .input('icCustomerId', sql.Int, ic.icCustomerId)
+      .input('icSupplierId', sql.Int, ic.icSupplierId)
+      .query(`
+        WITH Invoices AS (
+          SELECT
+            sih.ID              AS invId,
+            sjv.JournalVoucherHeaderID AS jvId,
+            sih.TransactionDate AS dt,
+            sih.Customer        AS customerId,
+            SUM(CASE WHEN ac.Code LIKE '5%'       THEN jd.Credit - jd.Debit ELSE 0 END) AS revenue,
+            SUM(CASE WHEN ac.Code LIKE '4010101%' THEN jd.Debit - jd.Credit ELSE 0 END) AS reportedCogs
+          FROM SalesInvoice_JournalVoucherHeader sjv
+          JOIN SalesInvoiceHeader   sih ON sih.ID = sjv.SalesInvoiceHeaderID
+          JOIN JournalVoucherDetail jd  ON jd.HeaderID = sjv.JournalVoucherHeaderID
+          JOIN AccountChart         ac  ON ac.ID = jd.AccountChart
+          WHERE sih.TransactionDate >= @from AND sih.TransactionDate < DATEADD(day, 1, @to)
+          GROUP BY sih.ID, sjv.JournalVoucherHeaderID, sih.TransactionDate, sih.Customer
+        ),
+        Matches AS (
+          SELECT i.invId, m.purId, m.purDate, m.purNet
+          FROM Invoices i
+          CROSS APPLY (
+            SELECT TOP 1 pih.ID AS purId, MIN(pih.TransactionDate) AS purDate, SUM(pid.Net) AS purNet
+            FROM PurchaseInvoiceHeader pih
+            JOIN PurchaseInvoiceDetail pid ON pid.HeaderID = pih.ID
+            WHERE pih.Supplier = @icSupplierId
+            GROUP BY pih.ID, pih.TransactionDate
+            HAVING ABS(SUM(pid.Net) - i.revenue) < 1
+               AND ABS(DATEDIFF(day, MIN(pih.TransactionDate), i.dt)) <= 60
+          ) m
+          WHERE i.revenue <> 0 AND (i.reportedCogs < 0 OR i.reportedCogs > i.revenue * 2)
+            AND i.customerId = @icCustomerId
+            AND NOT EXISTS (SELECT 1 FROM SalesReturnHeader srh WHERE srh.SalesInvoiceId = i.invId)
+        )
+        SELECT i.invId, i.jvId, i.dt, i.revenue, i.reportedCogs, mt.purId, mt.purDate, mt.purNet
+        FROM Invoices i
+        JOIN Matches mt ON mt.invId = i.invId
+        ORDER BY i.dt
+      `),
+    pool.request()
+      .input('from', sql.Date, from)
+      .input('to',   sql.Date, to)
       .query(`
         SELECT
           YEAR(h.TransactionDate)  AS Yr,
@@ -147,6 +224,17 @@ async function getNegativeStockAudit(dbName, from, to) {
     reportedCogs: +r.reportedCogs || 0,
     returnId:   r.returnId,
     returnDate: r.returnDate.toISOString().slice(0, 10),
+  }));
+
+  const resolvedByCustodyTransfer = custodyRes.recordset.map(r => ({
+    invId:        r.invId,
+    jvId:         r.jvId,
+    date:         r.dt.toISOString().slice(0, 10),
+    revenue:      +r.revenue || 0,
+    reportedCogs: +r.reportedCogs || 0,
+    purId:        r.purId,
+    purDate:      r.purDate.toISOString().slice(0, 10),
+    purNet:       +r.purNet || 0,
   }));
 
   const invoices = flaggedRes.recordset.map(r => {
@@ -216,8 +304,9 @@ async function getNegativeStockAudit(dbName, from, to) {
   totals.invoiceCount     = invoices.length;
   totals.absDistortion    = invoices.reduce((s, i) => s + Math.abs(i.distortion), 0);
   totals.resolvedByReturnCount = resolvedByReturn.length;
+  totals.resolvedByCustodyTransferCount = resolvedByCustodyTransfer.length;
 
-  return { db: dbName, from, to, invoices, monthly, totals, resolvedByReturn };
+  return { db: dbName, from, to, invoices, monthly, totals, resolvedByReturn, resolvedByCustodyTransfer };
 }
 
 module.exports = { getNegativeStockAudit };

@@ -34,7 +34,9 @@ function _nsaMount() {
       التكلفة في النظام. <strong style="color:#4ada8e">الفواتير اللي اتصححت بالفعل عن طريق مردود مبيعات
       فعلي (العميل رجّع البضاعة) مُستبعدة تلقائياً من كل الحسابات أدناه</strong> — تحديدها عن طريق الربط
       الرسمي <code>SalesReturnHeader.SalesInvoiceId</code>، مش تخمين بتطابق المبلغ (لأن فاتورتين مختلفتين
-      ممكن يتصادف تطابق نفس مبلغ التشويه بالصدفة مع مردود لواحدة منهم بس).
+      ممكن يتصادف تطابق نفس مبلغ التشويه بالصدفة مع مردود لواحدة منهم بس). <strong style="color:#6ab0f0">
+      وكمان الفواتير البينية اللي هي فعلياً نقل عهدة بين أبعاد ووسام (نفس البضاعة، نفس السعر، بيع مقابل
+      شراء بنفس القيمة) مُستبعدة كمان</strong> — دي مش صفقة ربح/خسارة حقيقية، مؤكَّد من صاحب الشركتين.
     </div>
 
     <div id="nsa-resolved-wrap" style="display:none;background:#0a2818;border:1px solid #1e5a3a;border-radius:8px;
@@ -48,6 +50,21 @@ function _nsaMount() {
             <th>تاريخ المردود</th><th>رقم المردود</th>
           </tr></thead>
           <tbody id="nsa-resolved-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="nsa-custody-wrap" style="display:none;background:#0a1e30;border:1px solid #1e4a7a;border-radius:8px;
+      padding:14px 18px;margin:12px 0;font-size:.82rem;color:#a0c8e8">
+      <div id="nsa-custody-summary" style="font-weight:600;margin-bottom:8px"></div>
+      <div style="overflow-x:auto">
+        <table class="tb-tbl" id="nsa-custody-table">
+          <thead><tr>
+            <th>تاريخ الفاتورة</th><th>رقم الفاتورة</th><th>JV</th>
+            <th class="num">الإيراد</th><th class="num">التكلفة المسجَّلة وقتها</th>
+            <th>تاريخ فاتورة الشراء المقابلة</th><th>رقم فاتورة الشراء</th><th class="num">قيمتها</th>
+          </tr></thead>
+          <tbody id="nsa-custody-tbody"></tbody>
         </table>
       </div>
     </div>
@@ -166,6 +183,7 @@ function _renderNSA() {
   _renderNSAChart();
   _renderNSAMonthlyTable();
   _renderNSAResolved();
+  _renderNSACustody();
   _renderNSAWissam();
   _renderNSAInvoiceTable();
 }
@@ -190,6 +208,30 @@ function _renderNSAResolved() {
       <td class="num">${fmt(r.reportedCogs, 2)}</td>
       <td style="white-space:nowrap">${esc(r.returnDate)}</td>
       <td>${r.returnId}</td>
+    </tr>`).join('');
+}
+
+function _renderNSACustody() {
+  const wrap = document.getElementById('nsa-custody-wrap');
+  const rows = _nsaData.resolvedByCustodyTransfer || [];
+  if (!wrap) return;
+  if (!rows.length) { wrap.style.display = 'none'; return; }
+
+  wrap.style.display = 'block';
+  const revSum = rows.reduce((s, r) => s + r.revenue, 0);
+  document.getElementById('nsa-custody-summary').textContent =
+    `🔄 ${rows.length} فاتورة كانت مؤهلة للتنبيه لكن هي فعلياً نقل عهدة بيني (بيع مقابل شراء بنفس القيمة) — لا ربح ولا خسارة حقيقية، مُستبعدة من كل الأرقام أعلاه (إجمالي إيرادها ${fmt(revSum, 2)} ر.س)`;
+
+  document.getElementById('nsa-custody-tbody').innerHTML = rows.map(r => `
+    <tr class="tb-row">
+      <td style="white-space:nowrap">${esc(r.date)}</td>
+      <td>${r.invId}</td>
+      <td>${r.jvId}</td>
+      <td class="num">${fmt(r.revenue, 2)}</td>
+      <td class="num">${fmt(r.reportedCogs, 2)}</td>
+      <td style="white-space:nowrap">${esc(r.purDate)}</td>
+      <td>${r.purId}</td>
+      <td class="num">${fmt(r.purNet, 2)}</td>
     </tr>`).join('');
 }
 
