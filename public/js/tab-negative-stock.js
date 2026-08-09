@@ -174,7 +174,8 @@ async function fetchNegativeStockAudit() {
 function renderNegativeStockAudit() {
   _nsaMount();
   initNegativeStockAudit();
-  if (_nsaData) _renderNSA(); else fetchNegativeStockAudit();
+  const activeDb = State.get('activeDb');
+  if (_nsaData && _nsaData.db === activeDb) _renderNSA(); else fetchNegativeStockAudit();
 }
 
 function _renderNSA() {

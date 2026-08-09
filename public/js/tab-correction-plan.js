@@ -110,7 +110,8 @@ async function fetchCorrectionPlan() {
 function renderCorrectionPlan() {
   _cpMount();
   initCorrectionPlan();
-  if (_cpData) _renderCP(); else fetchCorrectionPlan();
+  const activeDb = State.get('activeDb');
+  if (_cpData && _cpData.db === activeDb) _renderCP(); else fetchCorrectionPlan();
 }
 
 function _renderCP() {
