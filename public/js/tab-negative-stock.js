@@ -55,6 +55,22 @@ function _nsaMount() {
       </table>
     </div>
 
+    <div class="sec-title" style="margin-top:22px">🔄 ملخص خاص — وسام الفولاذ مقصوص (طرف ذو علاقة)</div>
+    <div id="nsa-wissam-wrap" style="background:#0f2035;border:1px solid #3a5a8a;border-radius:8px;padding:16px 18px;margin:10px 0 22px">
+      <div id="nsa-wissam-kpis" class="kpis"></div>
+      <div style="overflow-x:auto;margin-top:14px">
+        <table class="tb-tbl" id="nsa-wissam-table">
+          <thead><tr>
+            <th>التاريخ</th><th>رقم الفاتورة</th><th>JV</th><th>المندوب</th>
+            <th class="num">الإيراد</th><th class="num">التكلفة المُعلنة</th>
+            <th class="num">التكلفة المصحَّحة</th><th class="num">التشويه</th>
+          </tr></thead>
+          <tbody id="nsa-wissam-tbody"></tbody>
+        </table>
+      </div>
+      <button id="nsa-wissam-export" class="verify-btn" style="margin-top:12px">📊 تصدير Excel — وسام فقط</button>
+    </div>
+
     <div class="sec-title" style="margin-top:22px">قائمة الفواتير المتأثرة بالكامل</div>
     <input type="text" id="nsa-search" placeholder="🔍 بحث بالعميل أو المندوب..."
       style="margin:8px 0;padding:7px 12px;background:#0f2035;border:1px solid #1e3a5f;
@@ -88,6 +104,16 @@ function initNegativeStockAudit() {
       .finally(() => { btn.disabled = false; btn.textContent = '📊 تصدير Excel'; });
   });
   document.getElementById('nsa-search').addEventListener('input', _renderNSAInvoiceTable);
+  document.getElementById('nsa-wissam-export').addEventListener('click', () => {
+    const btn = document.getElementById('nsa-wissam-export');
+    btn.disabled = true; btn.textContent = '⏳ جاري التصدير…';
+    exportNSAWissamExcel().catch(e => { console.error(e); alert('خطأ في التصدير'); })
+      .finally(() => { btn.disabled = false; btn.textContent = '📊 تصدير Excel — وسام فقط'; });
+  });
+}
+
+function _nsaWissamInvoices() {
+  return (_nsaData?.invoices || []).filter(r => r.customer.includes('وسام'));
 }
 
 async function fetchNegativeStockAudit() {
@@ -121,7 +147,50 @@ function _renderNSA() {
   _renderNSAKPIs();
   _renderNSAChart();
   _renderNSAMonthlyTable();
+  _renderNSAWissam();
   _renderNSAInvoiceTable();
+}
+
+function _renderNSAWissam() {
+  const wrap = document.getElementById('nsa-wissam-wrap');
+  const rows = _nsaWissamInvoices();
+  if (!wrap) return;
+
+  if (!rows.length) {
+    wrap.innerHTML = `<div style="text-align:center;padding:20px;color:#3a5a7a">لا توجد فواتير متأثرة لوسام في هذه الفترة</div>`;
+    return;
+  }
+
+  const revenue      = rows.reduce((s, r) => s + r.revenue, 0);
+  const reportedCogs = rows.reduce((s, r) => s + r.reportedCogs, 0);
+  const correctedCogs = rows.reduce((s, r) => s + r.correctedCogs, 0);
+  const reportedProfit  = revenue - reportedCogs;
+  const correctedProfit = revenue - correctedCogs;
+  const distortion       = reportedProfit - correctedProfit;
+
+  const items = [
+    { lbl: 'عدد الفواتير المتأثرة لوسام', val: fmt(rows.length, 0), sub: `من ${rows.length ? rows[0].date : ''} إلى ${rows.length ? rows[rows.length-1].date : ''}`, accent: '#5baef0' },
+    { lbl: 'الربح كما هو مُعلن', val: fmt(reportedProfit, 2) + ' ر.س', sub: reportedProfit >= 0 ? 'يبدو رابحاً' : 'يبدو خاسراً', accent: '#5baef0' },
+    { lbl: 'الربح بعد التصحيح', val: fmt(correctedProfit, 2) + ' ر.س', sub: correctedProfit >= 0 ? 'رابح فعلياً' : 'خاسر فعلياً', accent: correctedProfit >= 0 ? '#4ada8e' : '#da4a4a' },
+    { lbl: 'مقدار المبالغة الوهمية في الربح', val: fmt(distortion, 2) + ' ر.س', sub: 'الفرق بين المُعلن والمصحَّح', accent: '#f0a050' },
+  ];
+  document.getElementById('nsa-wissam-kpis').innerHTML = items.map(k =>
+    `<div class="kpi" style="--accent:${k.accent}"><div class="lbl">${k.lbl}</div><div class="val">${k.val}</div><div class="sub">${k.sub}</div></div>`
+  ).join('');
+
+  document.getElementById('nsa-wissam-tbody').innerHTML = rows.map(r => {
+    const distColor = r.distortion >= 0 ? '#da4a4a' : '#4ada8e';
+    return `<tr class="tb-row">
+      <td style="white-space:nowrap">${esc(r.date)}</td>
+      <td>${r.invId}</td>
+      <td>${r.jvId}</td>
+      <td>${esc(r.salesMan)}</td>
+      <td class="num">${fmt(r.revenue, 2)}</td>
+      <td class="num" style="color:${r.reportedCogs < 0 ? '#da4a4a' : ''}">${fmt(r.reportedCogs, 2)}</td>
+      <td class="num">${fmt(r.correctedCogs, 2)}</td>
+      <td class="num" style="color:${distColor};font-weight:600">${r.distortion >= 0 ? '+' : ''}${fmt(r.distortion, 2)}</td>
+    </tr>`;
+  }).join('');
 }
 
 function _renderNSAKPIs() {
@@ -277,6 +346,46 @@ async function exportNSAExcel() {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = `تدقيق_عيب_المخزون_السالب_${_nsaData.from}_${_nsaData.to}.xlsx`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+async function exportNSAWissamExcel() {
+  const rows = _nsaWissamInvoices();
+  if (!rows.length) { alert('لا توجد فواتير وسام متأثرة للتصدير'); return; }
+  if (typeof ExcelJS === 'undefined') { alert('مكتبة ExcelJS لم تُحمَّل بعد'); return; }
+
+  const revenue        = rows.reduce((s, r) => s + r.revenue, 0);
+  const reportedCogs   = rows.reduce((s, r) => s + r.reportedCogs, 0);
+  const correctedCogs  = rows.reduce((s, r) => s + r.correctedCogs, 0);
+
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'MekSoft ERP Dashboard'; wb.created = new Date();
+  const ws = wb.addWorksheet('وسام — فواتير متأثرة', { views: [{ rightToLeft: true }] });
+  ws.columns = [
+    { header: 'التاريخ', key: 'date', width: 12 },
+    { header: 'رقم الفاتورة', key: 'invId', width: 12 },
+    { header: 'JV Header', key: 'jvId', width: 12 },
+    { header: 'المندوب', key: 'salesMan', width: 20 },
+    { header: 'الإيراد', key: 'revenue', width: 14 },
+    { header: 'التكلفة المُعلنة', key: 'reportedCogs', width: 16 },
+    { header: 'التكلفة المصحَّحة', key: 'correctedCogs', width: 16 },
+    { header: 'التشويه', key: 'distortion', width: 14 },
+  ];
+  ws.getRow(1).font = { bold: true };
+  rows.forEach(r => ws.addRow(r));
+  ws.addRow({});
+  const totRow = ws.addRow({
+    date: 'الإجمالي', revenue, reportedCogs, correctedCogs,
+    distortion: (revenue - reportedCogs) - (revenue - correctedCogs),
+  });
+  totRow.font = { bold: true };
+
+  const buf = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `تدقيق_وسام_عيب_المخزون_${_nsaData.from}_${_nsaData.to}.xlsx`;
   a.click();
   URL.revokeObjectURL(a.href);
 }
