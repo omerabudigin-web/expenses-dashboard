@@ -118,16 +118,28 @@ async function getNegativeStockAudit(dbName, from, to) {
           JOIN SalesInvoiceDetail sid ON sid.HeaderID = f.invId
           LEFT JOIN ItemAvgCost iac   ON iac.Item = sid.Item
           GROUP BY f.invId
+        ),
+        RankedLines AS (
+          SELECT sid.HeaderID AS invId, i.NameAr AS itemName, sid.Item AS itemId,
+                 ABS(sid.GroupQuantity) AS qty, iac.avgCostPerUnit AS refCostPerUnit,
+                 ROW_NUMBER() OVER (PARTITION BY sid.HeaderID ORDER BY ABS(sid.GroupCostPrice) DESC) AS rn
+          FROM SalesInvoiceDetail sid
+          JOIN Item i ON i.Id = sid.Item
+          JOIN Flagged f ON f.invId = sid.HeaderID
+          LEFT JOIN ItemAvgCost iac ON iac.Item = sid.Item
         )
         SELECT
           f.invId, f.jvId, f.dt, f.revenue, f.reportedCogs,
           cl.correctedCogs, cl.unpricedLines,
           c.NameAr  AS customerName,
-          sm.NameAr AS salesManName
+          sm.NameAr AS salesManName,
+          rl.itemName AS dominantItem, rl.itemId AS dominantItemId,
+          rl.qty AS dominantItemQty, rl.refCostPerUnit AS dominantItemRefCost
         FROM Flagged f
         JOIN CorrectedLines cl ON cl.invId = f.invId
         LEFT JOIN Customer c  ON c.Id  = f.customerId
         LEFT JOIN SalesMan sm ON sm.Id = f.salesManId
+        LEFT JOIN RankedLines rl ON rl.invId = f.invId AND rl.rn = 1
         ORDER BY f.dt
       `),
     pool.request()
@@ -251,6 +263,9 @@ async function getNegativeStockAudit(dbName, from, to) {
       correctedCogs,
       distortion:     reportedCogs - correctedCogs, // + = COGS overstated (profit understated), - = COGS understated (profit overstated)
       unpriced:       (r.unpricedLines || 0) > 0,   // item never appears in PurchaseInvoiceDetail — corrected estimate incomplete
+      dominantItem:       r.dominantItem || null,   // the line with the largest |GroupCostPrice| — where to look first in MekSoft
+      dominantItemQty:    r.dominantItemQty != null ? +r.dominantItemQty : null,
+      dominantItemRefCost: r.dominantItemRefCost != null ? +r.dominantItemRefCost : null, // clean avg purchase cost/unit for that item
     };
   });
 
@@ -306,7 +321,27 @@ async function getNegativeStockAudit(dbName, from, to) {
   totals.resolvedByReturnCount = resolvedByReturn.length;
   totals.resolvedByCustodyTransferCount = resolvedByCustodyTransfer.length;
 
-  return { db: dbName, from, to, invoices, monthly, totals, resolvedByReturn, resolvedByCustodyTransfer };
+  // Correction plan: group invoices by the item most responsible for the defect,
+  // so the accountant can prioritize the few SKUs behind most of the distortion
+  // instead of chasing invoices one by one.
+  const byItem = new Map();
+  invoices.forEach(inv => {
+    const key = inv.dominantItem || 'غير محدَّد';
+    if (!byItem.has(key)) byItem.set(key, {
+      item: key, refCostPerUnit: inv.dominantItemRefCost, invoiceCount: 0,
+      totalRevenue: 0, totalReportedCogs: 0, totalCorrectedCogs: 0, totalAbsDistortion: 0,
+    });
+    const g = byItem.get(key);
+    g.invoiceCount++;
+    g.totalRevenue      += inv.revenue;
+    g.totalReportedCogs  += inv.reportedCogs;
+    g.totalCorrectedCogs += inv.correctedCogs;
+    g.totalAbsDistortion += Math.abs(inv.distortion);
+    if (g.refCostPerUnit == null && inv.dominantItemRefCost != null) g.refCostPerUnit = inv.dominantItemRefCost;
+  });
+  const itemSummary = [...byItem.values()].sort((a, b) => b.totalAbsDistortion - a.totalAbsDistortion);
+
+  return { db: dbName, from, to, invoices, monthly, totals, resolvedByReturn, resolvedByCustodyTransfer, itemSummary };
 }
 
 module.exports = { getNegativeStockAudit };

@@ -39,6 +39,7 @@
   else if (name === 'ccc')       renderCCCTab();
   else if (name === 'forecast')  renderForecastTab();
   else if (name === 'negstock')  renderNegativeStockAudit();
+  else if (name === 'correction-plan') renderCorrectionPlan();
 }
 
 // ── Connection status indicator ───────────────────────────────────────────────
