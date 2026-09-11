@@ -28,6 +28,17 @@ const COMPANIES = {
     db:         process.env.DB2_NAME || 'MekSoftDb2',
     companyKey: 'وسام الفولاذ',
   },
+  // كيان جديد بعد تحويل أبعاد من مؤسسة إلى شركة بتاريخ 2026-09-06 — مستقل تماماً
+  // عن "أبعاد الحديد" أعلاه، لا تُدمَج معه. لا سجل تمويل خاص به بعد في
+  // financing-data.json → loans=[] وmandatedCosts فارغ، فتظهر مؤشراته "غير متاح"
+  // تلقائياً (وليس صفراً) طالما لم تُضَف بياناته يدوياً.
+  abaad_sh: {
+    label:      'شركة أبعاد الحديد التجارية',
+    db:         process.env.DB4_NAME || 'MekSoftDb4',
+    companyKey: 'أبعاد الحديد (شركة)',
+    pending:    true,
+    note: 'التسهيلات التمويلية مسجَّلة باسم المؤسسة — تحقق من الحوالة',
+  },
 };
 
 const FROM_DATE = '2025-10-01';
@@ -231,6 +242,8 @@ router.get('/', async (req, res) => {
       out[key] = {
         label:  meta.label,
         period: `${FROM_DATE} → ${TO_DATE}`,
+        pending: meta.pending || false,
+        pendingNote: meta.note || null,
 
         revenue:        fin.revenue,
         totalExpenses:  fin.totalExpenses,

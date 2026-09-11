@@ -158,6 +158,13 @@ function _icBuildShell() {
     </div>
     <button class="ic-refresh" onclick="_icLoad()">🔄 تحديث النسخة</button>
   </div>
+  <div class="ic-banner warn">
+    <div class="ic-banner-icon">⚠️</div>
+    <div>
+      <div>شركة أبعاد الحديد التجارية (Db4) خارج نطاق المطابقة البينية حتى تتوفر معاملات فعلية</div>
+      <div class="ic-banner-sub">أرصدتها حالياً قيدا نقل رصيد افتتاحي فقط (بلا فواتير بيع/شراء بينية بعد) — لن تُدرَج في أي تصنيف أو مذكرة أدناه إلى أن تنشأ معاملات حقيقية معها.</div>
+    </div>
+  </div>
   <div id="ic-memo2-section"></div>
   <div id="ic-memo3-section"></div>
   <div id="ic-content"></div>`;

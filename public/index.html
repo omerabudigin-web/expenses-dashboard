@@ -8,6 +8,7 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <link rel="stylesheet" href="css/styles.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Tajawal:wght@400;500;700&display=swap">
 </head>
 <body>
 
@@ -22,7 +23,7 @@
 <div class="hdr">
   <div>
     <h1>📊 تحليل المصروفات التشغيلية</h1>
-    <h2><span id="company-name"></span> — من <span id="data-start">2025-10-01</span> حتى الآن</h2>
+    <h2><span id="company-name"></span><span id="pending-entity-badge"></span> — من <span id="data-start">2025-10-01</span> حتى الآن</h2>
   </div>
   <div class="hdr-meta">
     <div class="db-switch-row">
@@ -46,55 +47,128 @@
   </div>
 </div>
 
-<div class="tabs">
-  <div class="tab" data-tab="executive">اللوحة التنفيذية ⭐</div>
-  <div class="tab" data-tab="health">🩺 الصحة المالية والإنذار المبكر</div>
-  <div class="tab active" data-tab="summary">الملخص</div>
-  <div class="tab" data-tab="monthly">شهري</div>
-  <div class="tab" data-tab="accounts">حسب الحساب</div>
-  <div class="tab" data-tab="branches">الفروع</div>
-  <div class="tab" data-tab="assets">الأصول والمركبات</div>
-  <div class="tab" data-tab="details">تفاصيل القيود</div>
-  <div class="tab" data-tab="compare">المقارنة</div>
-  <div class="tab" data-tab="pl">قائمة الدخل</div>
-  <div class="tab" data-tab="bs">المركز المالي</div>
-  <div class="tab" data-tab="cf">التدفقات النقدية</div>
-  <div class="tab" data-tab="ratios">النسب المالية</div>
-  <div class="tab" data-tab="notes">الإيضاحات والتوجيهات</div>
-  <div class="tab" data-tab="cfo">لوحة المدير التنفيذي</div>
-  <div class="tab" data-tab="consolidated">مجمعة ★</div>
-  <div class="tab" data-tab="cons-cf">تدفقات مجمعة ★</div>
-  <div class="tab" data-tab="pl-comp">مقارنة الجرد ⚖</div>
-  <div class="tab" data-tab="trial">ميزان المراجعة</div>
-  <div class="tab" data-tab="is">الدخل الشامل ✦</div>
-  <div class="tab" data-tab="safety">مستلزمات السلامة 📦</div>
-  <div class="tab" data-tab="finmodel">النموذج المالي 📊</div>
-  <div class="tab" data-tab="stock">رصيد المخزون 📦</div>
-  <div class="tab" data-tab="inv-aging">أعمار المخزون ⏳</div>
-  <div class="tab" data-tab="item-profit">ربحية الصنف 💹</div>
-  <div class="tab" data-tab="negstock"><span id="ns-nav-badge" class="nav-badge" style="display:none"></span>🚨 تدقيق عيب المخزون السالب</div>
-  <div class="tab" data-tab="correction-plan">🛠️ خطة تصحيح المخزون</div>
-  <div class="tab" data-tab="inventory">تحليل المخزون 🔄</div>
-  <div class="tab" data-tab="manufacturing">التصنيع 🏭</div>
-  <div class="tab" data-tab="coils">الكويلات 🔩</div>
-  <a href="/cash-sales.html?db=MekSoftDb1" class="tab tab-link">المبيعات النقدية — أبعاد 💵</a>
-  <a href="/cash-sales.html?db=MekSoftDb2" class="tab tab-link">المبيعات النقدية — وسام 💵</a>
-  <div class="tab" data-tab="sales-inv">فواتير المبيعات 🧾</div>
-  <div class="tab" data-tab="ar-collection">خطة تحصيل المدينين 💰</div>
-  <div class="tab" data-tab="interco-recon">التسوية البينية أبعاد↔وسام 🔄</div>
-  <div class="tab" data-tab="vat-return">إقرار القيمة المضافة 🧾</div>
-  <div class="tab" data-tab="dscr">تغطية خدمة الدين 🏦</div>
-  <a href="/financing.html" class="tab tab-link">سجل التمويلات 📂</a>
-  <div class="tab" data-tab="aging">إعمار العملاء 📋</div>
-  <div class="tab" data-tab="ap-aging">أعمار الموردين 🏢</div>
-  <div class="tab" data-tab="liabilities">تركيبة الالتزامات 🏦</div>
-  <div class="tab" data-tab="fixedassets">الأصول الثابتة 🏭</div>
-  <div class="tab" data-tab="ccc">دورة التحويل النقدي ⏱</div>
-  <div class="tab" data-tab="forecast">التدفق النقدي التنبؤي 📅</div>
+<button id="sidebar-reopen" class="sidebar-reopen-btn" type="button" title="فتح القائمة">☰</button>
+<div id="sidebar-backdrop" class="sidebar-backdrop"></div>
+<nav class="sidebar" id="sidebar">
+  <div class="sidebar-search-row">
+    <input type="text" id="nav-search" class="sidebar-search" placeholder="🔍 بحث في التقارير…" autocomplete="off">
+    <button id="sidebar-collapse-btn" class="sidebar-collapse-btn" type="button" title="طي القائمة">◂</button>
+  </div>
+  <div class="nav-groups" id="nav-groups">
+
+    <div class="nav-group" data-group="overview">
+      <button class="nav-group-header" type="button"><span class="ngh-icon">🏠</span><span class="ngh-label">نظرة عامة</span><span class="ngh-chevron">▾</span></button>
+      <div class="nav-group-items">
+        <div class="tab" data-tab="executive">اللوحة التنفيذية ⭐</div>
+        <div class="tab" data-tab="health">🩺 الصحة المالية والإنذار المبكر</div>
+        <div class="tab active" data-tab="summary">الملخص</div>
+        <div class="tab" data-tab="cfo">لوحة المدير التنفيذي</div>
+      </div>
+    </div>
+
+    <div class="nav-group" data-group="statements">
+      <button class="nav-group-header" type="button"><span class="ngh-icon">📑</span><span class="ngh-label">القوائم المالية</span><span class="ngh-chevron">▾</span></button>
+      <div class="nav-group-items">
+        <div class="tab" data-tab="pl">قائمة الدخل</div>
+        <div class="tab" data-tab="bs">المركز المالي</div>
+        <div class="tab" data-tab="cf">التدفقات النقدية</div>
+        <div class="tab" data-tab="is">الدخل الشامل ✦</div>
+        <div class="tab" data-tab="trial">ميزان المراجعة</div>
+        <div class="tab" data-tab="ratios">النسب المالية</div>
+        <div class="tab" data-tab="notes">الإيضاحات والتوجيهات</div>
+      </div>
+    </div>
+
+    <div class="nav-group" data-group="consolidated">
+      <button class="nav-group-header" type="button"><span class="ngh-icon">🧩</span><span class="ngh-label">التقارير المجمعة</span><span class="ngh-chevron">▾</span></button>
+      <div class="nav-group-items">
+        <div class="tab" data-tab="consolidated">مجمعة ★</div>
+        <div class="tab" data-tab="cons-cf">تدفقات مجمعة ★</div>
+        <div class="tab" data-tab="pl-comp">مقارنة الجرد ⚖</div>
+        <div class="tab" data-tab="interco-recon">التسوية البينية أبعاد↔وسام 🔄</div>
+      </div>
+    </div>
+
+    <div class="nav-group" data-group="ops">
+      <button class="nav-group-header" type="button"><span class="ngh-icon">💸</span><span class="ngh-label">التشغيل والمصروفات</span><span class="ngh-chevron">▾</span></button>
+      <div class="nav-group-items">
+        <div class="tab" data-tab="monthly">شهري</div>
+        <div class="tab" data-tab="accounts">حسب الحساب</div>
+        <div class="tab" data-tab="branches">الفروع</div>
+        <div class="tab" data-tab="expense-analysis">تحليل المصروفات 🌳</div>
+        <div class="tab" data-tab="details">تفاصيل القيود</div>
+        <div class="tab" data-tab="compare">المقارنة</div>
+      </div>
+    </div>
+
+    <div class="nav-group" data-group="assets">
+      <button class="nav-group-header" type="button"><span class="ngh-icon">🏭</span><span class="ngh-label">الأصول</span><span class="ngh-chevron">▾</span></button>
+      <div class="nav-group-items">
+        <div class="tab" data-tab="assets">الأصول والمركبات</div>
+        <div class="tab" data-tab="fixedassets">الأصول الثابتة 🏭</div>
+        <div class="tab" data-tab="safety">مستلزمات السلامة 📦</div>
+        <div class="tab" data-tab="coils">الكويلات 🔩</div>
+      </div>
+    </div>
+
+    <div class="nav-group" data-group="inventory">
+      <button class="nav-group-header" type="button"><span class="ngh-icon">📦</span><span class="ngh-label">المخزون والتصنيع</span><span class="ngh-chevron">▾</span></button>
+      <div class="nav-group-items">
+        <div class="tab" data-tab="stock">رصيد المخزون 📦</div>
+        <div class="tab" data-tab="inv-aging">أعمار المخزون ⏳</div>
+        <div class="tab" data-tab="item-profit">ربحية الصنف 💹</div>
+        <div class="tab" data-tab="negstock"><span id="ns-nav-badge" class="nav-badge" style="display:none"></span>🚨 تدقيق عيب المخزون السالب</div>
+        <div class="tab" data-tab="correction-plan">🛠️ خطة تصحيح المخزون</div>
+        <div class="tab" data-tab="inventory">تحليل المخزون 🔄</div>
+        <div class="tab" data-tab="manufacturing">التصنيع 🏭</div>
+      </div>
+    </div>
+
+    <div class="nav-group" data-group="sales">
+      <button class="nav-group-header" type="button"><span class="ngh-icon">🧾</span><span class="ngh-label">المبيعات والتحصيل</span><span class="ngh-chevron">▾</span></button>
+      <div class="nav-group-items">
+        <div class="tab" data-tab="sales-inv">فواتير المبيعات 🧾</div>
+        <a href="/cash-sales.html?db=MekSoftDb1" class="tab tab-link">المبيعات النقدية — أبعاد 💵</a>
+        <a href="/cash-sales.html?db=MekSoftDb2" class="tab tab-link">المبيعات النقدية — وسام 💵</a>
+        <div class="tab" data-tab="ar-collection">خطة تحصيل المدينين 💰</div>
+        <div class="tab" data-tab="aging">إعمار العملاء 📋</div>
+      </div>
+    </div>
+
+    <div class="nav-group" data-group="liabilities">
+      <button class="nav-group-header" type="button"><span class="ngh-icon">🏦</span><span class="ngh-label">الالتزامات والتمويل</span><span class="ngh-chevron">▾</span></button>
+      <div class="nav-group-items">
+        <div class="tab" data-tab="ap-aging">أعمار الموردين 🏢</div>
+        <div class="tab" data-tab="liabilities">تركيبة الالتزامات 🏦</div>
+        <div class="tab" data-tab="dscr">تغطية خدمة الدين 🏦</div>
+        <a href="/financing.html" class="tab tab-link">سجل التمويلات 📂</a>
+      </div>
+    </div>
+
+    <div class="nav-group" data-group="cash">
+      <button class="nav-group-header" type="button"><span class="ngh-icon">💧</span><span class="ngh-label">النقدية والتنبؤ</span><span class="ngh-chevron">▾</span></button>
+      <div class="nav-group-items">
+        <div class="tab" data-tab="budget-actual">🎯 الموازنة مقابل الفعلي</div>
+        <div class="tab" data-tab="ccc">دورة التحويل النقدي ⏱</div>
+        <div class="tab" data-tab="forecast">التدفق النقدي التنبؤي 📅</div>
+        <div class="tab" data-tab="bank-meeting">📝 ملخص اجتماع البنك</div>
         <div class="tab" data-tab="riyad-renewal">🏦 تجديد قرض الرياض</div>
-  <a href="/budget.html"           class="tab tab-link tab-budget">الموازنة التقديرية 📈</a>
-  <a href="/cashflow-budget.html" class="tab tab-link tab-cfbudget">الموازنة النقدية 💧</a>
-</div>
+        <a href="/budget.html"           class="tab tab-link tab-budget">توقعات الإيرادات (سيناريوهات) 📈</a>
+        <a href="/cashflow-budget.html" class="tab tab-link tab-cfbudget">توقعات التدفق النقدي (سيناريوهات) 💧</a>
+        <div class="tab" data-tab="finmodel">النموذج المالي 📊</div>
+      </div>
+    </div>
+
+    <div class="nav-group" data-group="tax">
+      <button class="nav-group-header" type="button"><span class="ngh-icon">🧮</span><span class="ngh-label">الضرائب والامتثال</span><span class="ngh-chevron">▾</span></button>
+      <div class="nav-group-items">
+        <div class="tab" data-tab="vat-return">إقرار القيمة المضافة 🧾</div>
+        <div class="tab" data-tab="zakat">🕌 مخصص الزكاة والضريبة</div>
+      </div>
+    </div>
+
+  </div>
+</nav>
 
 <div id="tab-summary" class="wrap">
   <div class="filters">
@@ -308,6 +382,8 @@
   <div class="filters" style="margin-bottom:18px;flex-wrap:wrap;gap:8px">
     <label>الفترة:</label>
     <select id="pl-period-sel" class="sel"><option value="all">كل الفترة</option></select>
+    <label>الفرع:</label>
+    <select id="pl-branch-sel" class="sel"><option value="all">كل الفروع (موحّد)</option></select>
     <span id="pl-period-label" style="font-size:.78rem;color:#7090b0;align-self:center"></span>
     <button id="pl-excel-btn" class="btn sm">📥 Excel</button>
     <button id="pl-html-btn"  class="btn sm">📄 HTML</button>
@@ -615,11 +691,14 @@
       <option value="h6">آخر 6 أشهر</option>
       <option value="h3">آخر 3 أشهر</option>
     </select>
+    <label>الفرع:</label>
+    <select id="cfo-branch-sel" class="sel"><option value="all">كل الفروع (موحّد)</option></select>
     <span id="cfo-period-label" style="font-size:.78rem;color:#7090b0;align-self:center"></span>
     <button id="cfo-excel-btn" class="btn sm">📥 Excel</button>
     <button id="cfo-html-btn"  class="btn sm">📄 HTML</button>
     <button id="cfo-pdf-btn"   class="btn sm">🖨️ PDF</button>
   </div>
+  <div id="cfo-branch-note" style="display:none;font-size:.72rem;color:#e0a050;background:#241a08;border:1px solid #4a3a10;border-radius:6px;padding:7px 12px;margin-bottom:14px;line-height:1.8"></div>
   <div id="cfo-hero" class="kpis" style="margin-bottom:20px"></div>
   <div class="grid2" style="margin-bottom:18px">
     <div class="card">
@@ -1019,6 +1098,106 @@
 
 </div>
 
+<div id="tab-expense-analysis" class="wrap hidden">
+
+  <div class="ea-controls-row">
+    <label>فترة:</label>
+    <select id="ea-quick">
+      <option value="">مخصص</option>
+      <option value="2025">سنة 2025 (أكتوبر–ديسمبر)</option>
+      <option value="2026-ytd" selected>سنة 2026 (حتى الآن)</option>
+      <option value="all">كل الفترة (2025–الآن)</option>
+    </select>
+    <label>من:</label>
+    <input type="month" id="ea-from">
+    <label>إلى:</label>
+    <input type="month" id="ea-to">
+
+    <label>المستوى الافتراضي:</label>
+    <select id="ea-level">
+      <option value="1">الأول — أقسام رئيسية</option>
+      <option value="2" selected>الثاني — مجموعات</option>
+      <option value="3">الثالث — مجموعات فرعية</option>
+      <option value="4">الرابع — حسابات تفصيلية</option>
+      <option value="5">الخامس — كامل التفاصيل</option>
+    </select>
+
+    <label>الفرع:</label>
+    <select id="ea-branch">
+      <option value="ALL">جميع الفروع</option>
+    </select>
+
+    <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
+      <input type="checkbox" id="ea-compare" style="accent-color:#5baef0;cursor:pointer">
+      مقارنة بالعام الماضي
+    </label>
+
+    <button class="ea-btn" id="ea-run">🌳 عرض التحليل</button>
+    <button class="ea-btn" id="ea-export-excel">📊 Excel</button>
+    <button class="ea-btn" id="ea-export-html">🌐 HTML</button>
+    <button class="ea-btn" id="ea-export-csv">📄 CSV</button>
+    <button class="ea-btn" id="ea-print">🖨 طباعة</button>
+  </div>
+
+  <div class="ea-search-row">
+    <input type="text" id="ea-search" placeholder="🔍 ابحث بالكود أو اسم الحساب…">
+  </div>
+
+  <div id="ea-ytd-note"></div>
+
+  <div id="ea-loading" class="hidden" style="text-align:center;padding:14px;color:#5a80a0">⏳ جارٍ التحميل…</div>
+
+  <div class="ea-kpi-row" id="ea-kpis"></div>
+
+  <div class="ea-charts-grid">
+    <div class="ea-chart-card">
+      <div class="ea-chart-title">📈 الاتجاه الشهري (حسب الفئات)</div>
+      <div class="ea-chart-wrap"><canvas id="ea-chart-trend"></canvas></div>
+    </div>
+    <div class="ea-chart-card">
+      <div class="ea-chart-title">🥧 توزيع أقسام المصروفات (المستوى الأول الفعلي)</div>
+      <div class="ea-chart-wrap"><canvas id="ea-chart-l1pie"></canvas></div>
+    </div>
+    <div class="ea-chart-card">
+      <div class="ea-chart-title">🏆 أكبر 10 حسابات تفصيلية</div>
+      <div class="ea-chart-wrap"><canvas id="ea-chart-top10"></canvas></div>
+    </div>
+    <div class="ea-chart-card">
+      <div class="ea-chart-title">🏢 توزيع حسب الفرع</div>
+      <div class="ea-chart-wrap" style="display:flex;gap:10px">
+        <div style="flex:1.4;position:relative"><canvas id="ea-chart-brbar"></canvas></div>
+        <div style="flex:1;position:relative"><canvas id="ea-chart-brpie"></canvas></div>
+      </div>
+    </div>
+    <div class="ea-chart-card" style="grid-column:1 / -1">
+      <div class="ea-chart-title">📊 تحليل Pareto 80/20 — البنود التفصيلية</div>
+      <div class="ea-chart-wrap" style="height:280px"><canvas id="ea-chart-pareto"></canvas></div>
+      <div id="ea-pareto-note"></div>
+    </div>
+  </div>
+
+  <div class="ea-section-title">💰 الفعلي مقابل الموازنة</div>
+  <div class="ea-budget-bar">
+    <button class="ea-btn" id="ea-derive-budget">🔄 إعادة اشتقاق من المتوسط</button>
+    <span id="ea-budget-status"></span>
+  </div>
+  <div id="ea-budget-wrap"></div>
+
+  <div class="ea-status-row">
+    <span id="ea-status"></span>
+    <span id="ea-count"></span>
+  </div>
+
+  <div class="ea-table-wrap">
+    <table id="ea-table">
+      <thead></thead>
+      <tbody id="ea-tbody"></tbody>
+    </table>
+  </div>
+  <div class="ea-footnote">المبالغ في هذا التاب صافي حركة الفترة (مدين−دائن) على كل حساب، وقد تتضمن قيوداً عكسية/تسويات محاسبية — فسّر أي رقم سالب على هذا الأساس، ولا يُعتمد أي رقم قبل مطابقته يدوياً.</div>
+
+</div>
+
 <div id="tab-safety" class="wrap hidden"></div>
 
 <div id="tab-sales-inv" class="wrap hidden"></div>
@@ -1028,6 +1207,7 @@
 <div id="tab-negstock" class="wrap hidden"></div>
 <div id="tab-correction-plan" class="wrap hidden"></div>
 <div id="tab-vat-return"   class="wrap hidden"></div>
+<div id="tab-zakat"        class="wrap hidden"></div>
 <div id="tab-dscr"         class="wrap hidden"></div>
 <div id="tab-aging"    class="wrap hidden"></div>
 <div id="tab-ap-aging" class="wrap hidden"></div>
@@ -1042,7 +1222,9 @@
 <div id="tab-coils" class="wrap hidden"></div>
 <div id="tab-ccc" class="wrap hidden"></div>
 <div id="tab-forecast" class="wrap hidden"></div>
+<div id="tab-bank-meeting" class="wrap hidden"></div>
 <div id="tab-riyad-renewal" class="wrap hidden"></div>
+<div id="tab-budget-actual" class="wrap hidden"></div>
 <div id="tab-executive" class="wrap hidden"></div>
 <div id="tab-health" class="wrap hidden"></div>
 
@@ -1052,6 +1234,7 @@
 <script src="/js/sse-client.js"></script>
 <script src="/js/charts.js"></script>
 <script src="/js/helpers.js"></script>
+<script src="/js/sidebar.js"></script>
 <script src="/js/tab-summary.js"></script>
 <script src="/js/tab-monthly.js"></script>
 <script src="/js/tab-accounts.js"></script>
@@ -1067,6 +1250,7 @@
 <script src="/js/tab-cfo.js"></script>
 <script src="/js/tab-consolidated.js"></script>
 <script src="/js/tab-trial-balance.js"></script>
+<script src="/js/tab-expense-analysis.js"></script>
 <script src="/js/tab-income-stmt.js"></script>
 <script src="/js/tab-pl-comp.js"></script>
 <script src="/js/tab-verify.js"></script>
@@ -1078,6 +1262,7 @@
 <script src="/js/tab-correction-plan.js"></script>
 <script src="/js/negstock-alert.js"></script>
 <script src="/js/tab-vat-return.js"></script>
+<script src="/js/tab-zakat.js"></script>
 <script src="/js/tab-dscr.js"></script>
 <script src="/js/tab-aging.js"></script>
 <script src="/js/tab-ap-aging.js"></script>
@@ -1092,7 +1277,9 @@
 <script src="/js/tab-coils.js"></script>
 <script src="/js/tab-ccc.js"></script>
 <script src="/js/tab-forecast.js"></script>
+<script src="/js/tab-bank-meeting.js"></script>
 <script src="/js/tab-riyad-renewal.js"></script>
+<script src="/js/tab-budget-actual.js"></script>
 <script src="/js/tab-executive.js"></script>
 <script src="/js/tab-health.js"></script>
 <script src="/js/main.js"></script>

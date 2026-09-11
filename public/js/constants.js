@@ -23,6 +23,19 @@ const BRANCH_LABEL = {
 };
 // Populated at runtime from server branchNames (Branch.NameAr)
 
+// كيانات (قواعد بيانات) أرصدتها تحت المعالجة — مصدرها الوحيد /api/config
+// (server/entity-config.js)، لا تُكرَّر هنا أي قائمة أسماء قواعد.
+function pendingDbNote(dbName) {
+  const cfg = State.get('config');
+  return (cfg && cfg.pendingDbs && cfg.pendingDbs[dbName]) || null;
+}
+function pendingDbBadgeHtml(dbName) {
+  const note = pendingDbNote(dbName);
+  if (!note) return '';
+  const esc = s => (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return `<span class="pending-db-badge" title="${esc(note)}">⚠️ ${esc(note)}</span>`;
+}
+
 // P&L statement line labels (Arabic)
 const PL_LABELS = {
   revenue:         'إيرادات المبيعات',

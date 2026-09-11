@@ -7,20 +7,21 @@ const path    = require('path');
 const fs      = require('fs');
 
 const { connectAll, getAvailableDbs, getDefaultDb, DB_NAMES, closeAll } = require('./db');
+const { PENDING_DBS }                                          = require('./entity-config');
 const { addClient, pushToClient, startPolling }               = require('./sse');
 const { getDetails, getAccounts, getAssets, getMonthly, getCompanyName } = require('./queries/expenses');
 const { getPLMonthly }                                        = require('./queries/pl');
 const { getBSMonthly, getBankFacilitiesMonthly }              = require('./queries/bs');
 const { getICPLElimination, getICBSElimination }              = require('./queries/consolidation');
 const { getPLComparisonData, getAdjDetail }                   = require('./queries/pl-comparison');
-const { getTrialBalance, getBranchList }                      = require('./queries/trial-balance');
+const { getTrialBalance, getBranchList, getExpenseLedger }    = require('./queries/trial-balance');
 const { getIncomeStatement, getIncomeStatementTree }           = require('./queries/income-statement');
 const { getCashSales }                                         = require('./queries/cash-sales');
 const { getBudget }                                            = require('./queries/budget');
 const { getCashFlowBudget }                                    = require('./queries/cashflow');
 const { getAgingData, getSupplierAgingData }                   = require('./queries/aging');
 const { getFixedAssets }                                       = require('./queries/fixed-assets');
-const { getStockData }                                         = require('./queries/stock');
+const { getStockData, getWarehouses }                          = require('./queries/stock');
 const { getSafetyData }                                        = require('./queries/safety');
 const { getCoilsData }                                         = require('./queries/coils');
 const { getMfgData }                                           = require('./queries/manufacturing');
@@ -32,13 +33,16 @@ const { getLiabilitiesData }                                   = require('./quer
 const { getInventoryAging }                                    = require('./queries/inv-aging');
 const { getItemProfitability }                                 = require('./queries/item-profitability');
 const { getARCollection }                                      = require('./queries/ar-collection');
-const { getIntercoRecon }                                      = require('./queries/interco-recon');
+const { getIntercoRecon, getMemo2, getMemo3 }                   = require('./queries/interco-recon');
 const { getDataIntegrityCheck }                                = require('./queries/data-integrity');
 const { getNegativeStockAudit }                                = require('./queries/negative-stock-audit');
 const { getVatReturn }                                         = require('./queries/vat-return');
 const { getExecutiveSummary }                                  = require('./queries/executive');
 const dscrRoute                                                = require('./routes/dscr');
 const financingRoute                                           = require('./routes/financing');
+const budgetActualRoute                                        = require('./routes/budget-actual');
+const expenseBudgetsRoute                                      = require('./routes/expense-budgets');
+const zakatRoute                                                = require('./routes/zakat');
 
 const app        = express();
 const PORT       = parseInt(process.env.PORT, 10)             || 3001;
@@ -79,6 +83,7 @@ app.get('/api/config', (_req, res) => {
     defaultDb:      getDefaultDb(),
     dataStartDate:  START_DATE,
     pollIntervalMs: POLL_MS,
+    pendingDbs:     PENDING_DBS,
   });
 });
 
@@ -87,6 +92,15 @@ app.use('/api/dscr', dscrRoute);
 
 // ── Financing register ─────────────────────────────────────────────────────────
 app.use('/api/financing', financingRoute);
+
+// ── Budget vs Actual ───────────────────────────────────────────────────────────
+app.use('/api/budget-actual', budgetActualRoute);
+
+// ── Expense-analysis tab budgets (branch × account, per DB) ───────────────────
+app.use('/api/expense-budgets', expenseBudgetsRoute);
+
+// ── Zakat / Tax provision ──────────────────────────────────────────────────────
+app.use('/api/zakat', zakatRoute);
 
 // ── GET /api/health ────────────────────────────────────────────────────────────
 app.get('/api/health', (_req, res) => {
@@ -515,15 +529,29 @@ app.get('/api/pl-comparison', async (req, res) => {
 });
 
 // ── GET /api/trial-balance ────────────────────────────────────────────────────
+// mode=ledger returns a flat (branch × account × month) expense breakdown
+// instead of the rolled-up tree — used by the expense-analysis tab's budget
+// auto-derivation and Pareto views. Same endpoint, no new route.
 app.get('/api/trial-balance', async (req, res) => {
   const dbName = resolveDb(req.query);
   const from     = req.query.from     || null;
   const to       = req.query.to       || null;
-  const branch   = parseInt(req.query.branch, 10) || 0;
-  const rootCode = (req.query.rootCode || '').replace(/[^0-9]/g, '').slice(0, 20);
 
   if (!from || !to || !/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to))
     return res.status(400).json({ error: 'from and to must be YYYY-MM-DD' });
+
+  if (req.query.mode === 'ledger') {
+    try {
+      const rows = await getExpenseLedger(dbName, { from, to });
+      return res.json(rows);
+    } catch (err) {
+      console.error('[api/trial-balance:ledger]', err.message);
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
+  const branch   = parseInt(req.query.branch, 10) || 0;
+  const rootCode = (req.query.rootCode || '').replace(/[^0-9]/g, '').slice(0, 20);
 
   try {
     const rows = await getTrialBalance(dbName, { from, to, branch, rootCode });
@@ -701,11 +729,12 @@ app.get('/api/manufacturing', async (req, res) => {
   }
 });
 
-// ── GET /api/inventory?db= ───────────────────────────────────────────────────
+// ── GET /api/inventory?db=&branch= ────────────────────────────────────────────
+// branch: 0/absent = كل الفروع، وإلا فرع محدد (فعلياً 1 أو 2 فقط لهذه الفئات)
 app.get('/api/inventory', async (req, res) => {
   const dbName = resolveDb(req.query);
   try {
-    const data = await getInventoryData(dbName);
+    const data = await getInventoryData(dbName, req.query.branch);
     res.json(data);
   } catch (err) {
     console.error('[api/inventory]', err.message);
@@ -737,11 +766,27 @@ app.get('/api/safety', async (req, res) => {
   }
 });
 
-// ── GET /api/stock?db= ────────────────────────────────────────────────────────
-app.get('/api/stock', async (req, res) => {
+// ── GET /api/inventory/warehouses?db= ──────────────────────────────────────────
+app.get('/api/inventory/warehouses', async (req, res) => {
   const dbName = resolveDb(req.query);
   try {
-    const data = await getStockData(dbName);
+    const data = await getWarehouses(dbName);
+    res.json(data);
+  } catch (err) {
+    console.error('[api/inventory/warehouses]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /api/stock?db=&warehouse=1,2&asOf=YYYY-MM-DD&negativeOnly=1 ────────────
+app.get('/api/stock', async (req, res) => {
+  const dbName = resolveDb(req.query);
+  const warehouse = (req.query.warehouse || '')
+    .split(',').map(s => s.trim()).filter(Boolean);
+  const asOf = /^\d{4}-\d{2}-\d{2}$/.test(req.query.asOf || '') ? req.query.asOf : undefined;
+  const negativeOnly = req.query.negativeOnly === '1' || req.query.negativeOnly === 'true';
+  try {
+    const data = await getStockData(dbName, { warehouse, asOf, negativeOnly });
     res.json(data);
   } catch (err) {
     console.error('[api/stock]', err.message);
@@ -887,6 +932,30 @@ app.get('/api/interco-recon', async (req, res) => {
   }
 });
 
+// ── GET /api/interco-recon/memo2?from= — مذكرة 2: أبعاد تبيع لوسام ────────────
+app.get('/api/interco-recon/memo2', async (req, res) => {
+  const from = /^\d{4}-\d{2}-\d{2}$/.test(req.query.from || '') ? req.query.from : START_DATE;
+  try {
+    const data = await getMemo2(from);
+    res.json(data);
+  } catch (err) {
+    console.error('[api/interco-recon/memo2]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /api/interco-recon/memo3?from= — مذكرة 3: تسوية الحساب الجاري ────────
+app.get('/api/interco-recon/memo3', async (req, res) => {
+  const from = /^\d{4}-\d{2}-\d{2}$/.test(req.query.from || '') ? req.query.from : START_DATE;
+  try {
+    const data = await getMemo3(from);
+    res.json(data);
+  } catch (err) {
+    console.error('[api/interco-recon/memo3]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── GET /api/data-integrity?db= — فحص توازن ميزان المراجعة الكلي (كل التاريخ) ──
 app.get('/api/data-integrity', async (req, res) => {
   const dbName = resolveDb(req.query);
@@ -902,7 +971,7 @@ app.get('/api/data-integrity', async (req, res) => {
 // ── GET /api/vat-return?company=abaad|wissam&from=YYYY-MM-DD&to=YYYY-MM-DD ────
 app.get('/api/vat-return', async (req, res) => {
   const dateRx  = /^\d{4}-\d{2}-\d{2}$/;
-  const company = ['abaad', 'wissam'].includes(req.query.company) ? req.query.company : 'abaad';
+  const company = ['abaad', 'wissam', 'abaad_sh'].includes(req.query.company) ? req.query.company : 'abaad';
   const from    = dateRx.test(req.query.from || '') ? req.query.from : START_DATE;
   const to      = dateRx.test(req.query.to   || '') ? req.query.to   : new Date().toISOString().slice(0, 10);
   try {

@@ -6,6 +6,7 @@ const DB_NAMES = [
   process.env.DB1_NAME,
   process.env.DB2_NAME,
   process.env.DB3_NAME,
+  process.env.DB4_NAME,
 ].filter(Boolean);
 
 const BASE_CONFIG = {

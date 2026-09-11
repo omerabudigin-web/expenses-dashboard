@@ -18,11 +18,13 @@
   else if (name === 'cons-cf')     renderConsCF();
   else if (name === 'pl-comp')     renderPLComparison();
   else if (name === 'trial')       renderTrialBalance();
+  else if (name === 'expense-analysis') renderExpenseAnalysisTab();
   else if (name === 'is')          renderIncomeStatement();
   else if (name === 'safety')      renderSafetyInventory();
   else if (name === 'ar-collection') renderARCollection();
   else if (name === 'interco-recon') renderIntercoRecon();
   else if (name === 'vat-return')  renderVatReturn();
+  else if (name === 'zakat')       renderZakatTab();
   else if (name === 'dscr')        renderDscrTab();
   else if (name === 'aging')       renderAgingTab();
   else if (name === 'ap-aging')    renderAPAgingTab();
@@ -38,7 +40,10 @@
   else if (name === 'sales-inv') renderSalesInvoicesTab();
   else if (name === 'ccc')       renderCCCTab();
   else if (name === 'forecast')  renderForecastTab();
-  else if (name === 'negstock')  renderNegativeStockAudit();
+  else if (name === 'budget-actual') renderBudgetActualTab();
+  else if (name === 'bank-meeting') renderBankMeetingTab();
+  else if (name === 'riyad-renewal') renderRiyadRenewalTab();
+  else if (name === 'negstock')      renderNegativeStockAudit();
   else if (name === 'correction-plan') renderCorrectionPlan();
 }
 
@@ -94,11 +99,14 @@ State.on('companyName', val => {
   const el = document.getElementById('company-name');
   if (el) el.textContent = val || '';
   if (val) document.title = 'تحليل المصروفات التشغيلية — ' + val;
+  const badgeEl = document.getElementById('pending-entity-badge');
+  if (badgeEl) badgeEl.innerHTML = ' ' + pendingDbBadgeHtml(State.get('activeDb'));
 });
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 async function init() {
   const config = await API.fetchConfig();
+  State.set('config', config);
 
   // Populate DB dropdown
   const dbSel = document.getElementById('db-select');
@@ -147,6 +155,8 @@ async function init() {
   // P&L period filter + exports
   const plPeriodSel = document.getElementById('pl-period-sel');
   if (plPeriodSel) plPeriodSel.addEventListener('change', renderPLTab);
+  const plBranchSel = document.getElementById('pl-branch-sel');
+  if (plBranchSel) plBranchSel.addEventListener('change', renderPLTab);
   const plExcelBtn = document.getElementById('pl-excel-btn');
   if (plExcelBtn)  plExcelBtn.addEventListener('click', exportPLExcel);
   const plHtmlBtn  = document.getElementById('pl-html-btn');
@@ -200,6 +210,8 @@ async function init() {
 
   const cfoQuickSel  = document.getElementById('cfo-quick-sel');
   if (cfoQuickSel)   cfoQuickSel.addEventListener('change', renderCFODashboard);
+  const cfoBranchSel = document.getElementById('cfo-branch-sel');
+  if (cfoBranchSel)  cfoBranchSel.addEventListener('change', renderCFODashboard);
   const cfoExcelBtn  = document.getElementById('cfo-excel-btn');
   if (cfoExcelBtn)   cfoExcelBtn.addEventListener('click', exportCFOExcel);
   const cfoHtmlBtn   = document.getElementById('cfo-html-btn');

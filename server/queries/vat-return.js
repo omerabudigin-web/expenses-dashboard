@@ -3,13 +3,56 @@ const { getPool } = require('../db');
 
 const DB1 = process.env.DB1_NAME || 'MekSoftDb1';
 const DB2 = process.env.DB2_NAME || 'MekSoftDb2';
+const DB4 = process.env.DB4_NAME || 'MekSoftDb4';
 
-function dbFor(company) { return company === 'wissam' ? DB2 : DB1; }
+// تاريخ تحويل أبعاد من مؤسسة إلى شركة. بعده تُسجَّل مستندات أبعاد في Db4
+// (الشركة)، وقبله في Db1 (المؤسسة) — الحد يمنع احتساب أي مستند مرتين في
+// كلا الإقرارين المنفصلين تماماً.
+const CONVERSION_DATE = '2026-09-06';
+
+function dbFor(company) {
+  if (company === 'wissam')   return DB2;
+  if (company === 'abaad_sh') return DB4;
+  return DB1;
+}
 function round2(n) { return Math.round((n || 0) * 100) / 100; }
+
+async function countPreConversionDocs(pool, cutDate) {
+  const r = await pool.request().input('cut', cutDate).query(`
+    SELECT
+      (SELECT COUNT(*) FROM SalesInvoiceHeader   WHERE TransactionDate < @cut) AS si,
+      (SELECT COUNT(*) FROM PurchaseInvoiceHeader WHERE TransactionDate < @cut) AS pi,
+      (SELECT COUNT(*) FROM SalesReturnHeader     WHERE TransactionDate < @cut) AS sr,
+      (SELECT COUNT(*) FROM PurchaseReturnHeader  WHERE TransactionDate < @cut) AS pr
+  `);
+  const row = r.recordset[0] || {};
+  return (row.si || 0) + (row.pi || 0) + (row.sr || 0) + (row.pr || 0);
+}
 
 async function getVatReturn(company, from, to) {
   const db   = dbFor(company);
   const pool = await getPool(db);
+
+  // حد التحويل: يقصر الفترة تلقائياً على الجانب الصحيح من 2026-09-06 لكل من
+  // أبعاد "المؤسسة" (Db1) وأبعاد "الشركة" (Db4) — لا يُطبَّق على وسام إطلاقاً،
+  // ولا يُغيِّر شيئاً لأي فترة لا تعبر تاريخ التحويل أصلاً (الحالة الافتراضية).
+  let effectiveFrom = from, effectiveTo = to, boundaryWarning = null;
+  if (company === 'abaad' && to > CONVERSION_DATE) {
+    effectiveTo = CONVERSION_DATE;
+    boundaryWarning = `تم قصر نهاية الفترة على ${CONVERSION_DATE} — تاريخ تحويل أبعاد إلى شركة؛ ما بعده من مستندات أبعاد يخص إقرار "شركة أبعاد الحديد التجارية" المنفصل.`;
+  }
+  if (company === 'abaad_sh' && from < CONVERSION_DATE) {
+    effectiveFrom = CONVERSION_DATE;
+    boundaryWarning = `تم قصر بداية الفترة على ${CONVERSION_DATE} — تاريخ تحويل أبعاد إلى شركة؛ ما قبله من مستندات أبعاد يخص إقرار "مؤسسة أبعاد الحديد التجارية" المنفصل.`;
+  }
+
+  let preConversionWarning = null;
+  if (company === 'abaad_sh') {
+    const cnt = await countPreConversionDocs(pool, CONVERSION_DATE);
+    if (cnt > 0) {
+      preConversionWarning = `⚠️ عُثر على ${cnt} مستند(ات) مبيعات/مشتريات في شركة أبعاد الحديد التجارية مؤرَّخة قبل تاريخ التحويل ${CONVERSION_DATE} — راجعها يدوياً، فقد تكون احتُسبت أيضاً في إقرار المؤسسة القديمة.`;
+    }
+  }
 
   /*
    * Three layers of VAT data:
@@ -172,8 +215,8 @@ async function getVatReturn(company, from, to) {
     FROM SI, SR, PI, PR, MJ_64, MJ_64_CR`;
 
   const result = await pool.request()
-    .input('from', from)
-    .input('to',   to)
+    .input('from', effectiveFrom)
+    .input('to',   effectiveTo)
     .query(sql);
 
   const d = result.recordset[0];
@@ -192,6 +235,10 @@ async function getVatReturn(company, from, to) {
     company,
     from,
     to,
+    effectiveFrom,
+    effectiveTo,
+    boundaryWarning,
+    preConversionWarning,
     asOf: new Date().toISOString(),
     rows: {
       r1:  { base: r1_base,  rate: 15,  vat: r1_vat  },

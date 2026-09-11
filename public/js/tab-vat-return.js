@@ -11,7 +11,10 @@ const VR = {
             adj: { r5_base:0, r5_vat:0, r8_base:0, r8_vat:0, r10_base:0, r10_vat:0, r14_vat:0 } },
   wissam: { data: null, from: '', to: '', loading: false,
             adj: { r5_base:0, r5_vat:0, r8_base:0, r8_vat:0, r10_base:0, r10_vat:0, r14_vat:0 } },
+  abaad_sh: { data: null, from: '', to: '', loading: false,
+            adj: { r5_base:0, r5_vat:0, r8_base:0, r8_vat:0, r10_base:0, r10_vat:0, r14_vat:0 } },
 };
+const VR_COMPANIES = ['abaad', 'wissam', 'abaad_sh'];
 let _vrTimer    = null;
 let _vrRendered = false;
 
@@ -67,8 +70,9 @@ const VR_CSS = `<style>
 .vr-btn-print{background:#1a2e50}
 .vr-btn-excel{background:#1a3a1a;border-color:#4caf50;color:#4caf50}
 .vr-btn-excel:hover{background:#4caf50;color:#0b1627}
-.vr-panels{display:grid;grid-template-columns:1fr 1fr;gap:0;border-top:1px solid #1e3060}
-@media(max-width:1080px){.vr-panels{grid-template-columns:1fr}}
+.vr-panels{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:0;border-top:1px solid #1e3060}
+.vr-panel-badge{display:inline-block;padding:2px 9px;border-radius:9px;font-size:.65rem;font-weight:700;background:#3d3000;color:#f5c842;border:1px solid #6e5000;margin-right:6px;vertical-align:middle}
+.vr-warn{background:#3d3000;border:1px solid #6e5000;color:#f5c842;border-radius:6px;padding:7px 10px;font-size:.7rem;margin:8px 0;line-height:1.6}
 .vr-panel{padding:16px 18px 20px;border-left:1px solid #1e3060}
 .vr-panel:last-child{border-left:none}
 .vr-panel-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;padding-bottom:8px;border-bottom:2px solid #C6A04A44}
@@ -146,7 +150,7 @@ function _vrBuildShell(startDate) {
 <div class="vr-hdr">
   <div>
     <div class="vr-hdr-title">إقرار ضريبة القيمة المضافة</div>
-    <div class="vr-hdr-sub">أبعاد الحديد — شهري &nbsp;|&nbsp; وسام الفولاذ — ربع سنوي</div>
+    <div class="vr-hdr-sub">أبعاد الحديد — شهري &nbsp;|&nbsp; وسام الفولاذ — ربع سنوي &nbsp;|&nbsp; شركة أبعاد الحديد — شهري</div>
     <div id="vr-status" class="vr-status">جارٍ التحميل… · ${VR_VERSION}</div>
   </div>
   <div class="vr-hdr-btns">
@@ -200,6 +204,30 @@ function _vrBuildShell(startDate) {
     </div>
     <div id="vr-body-wissam"><div class="vr-loading">⏳ جارٍ التحميل…</div></div>
   </div>
+
+  <!-- شركة أبعاد الحديد (Db4) -->
+  <div class="vr-panel" id="vr-panel-abaad_sh">
+    <div class="vr-panel-hdr">
+      <div>
+        <div class="vr-panel-title">🏢 شركة أبعاد الحديد — شهري
+          <span class="vr-panel-badge">⚠️ أرصدة تحت المعالجة — غير معتمدة</span>
+        </div>
+        <div class="vr-panel-period" id="vr-period-lbl-abaad_sh">—</div>
+      </div>
+      <div class="vr-panel-btns">
+        <button class="vr-btn vr-btn-sm vr-btn-excel" id="vr-btn-excel-abaad_sh">📊 Excel</button>
+        <button class="vr-btn vr-btn-sm vr-btn-print" id="vr-btn-print-abaad_sh">🖨 طباعة</button>
+      </div>
+    </div>
+    <div class="vr-period-bar">
+      <select class="vr-psel" id="vr-sel-abaad_sh">${mOpts}</select>
+      <span class="vr-lbl-s">أو</span>
+      <input type="date" class="vr-date-inp" id="vr-from-abaad_sh">
+      <span class="vr-lbl-s">→</span>
+      <input type="date" class="vr-date-inp" id="vr-to-abaad_sh">
+    </div>
+    <div id="vr-body-abaad_sh"><div class="vr-loading">⏳ جارٍ التحميل…</div></div>
+  </div>
 </div>
 
 <div class="vr-footer" id="vr-footer" style="display:none">
@@ -213,7 +241,7 @@ function _vrBindEvents() {
   // Refresh all
   document.getElementById('vr-btn-refresh').addEventListener('click', _vrLoadBoth);
 
-  ['abaad', 'wissam'].forEach(co => {
+  VR_COMPANIES.forEach(co => {
     // Period selector
     document.getElementById(`vr-sel-${co}`).addEventListener('change', () => {
       const val = document.getElementById(`vr-sel-${co}`).value;
@@ -291,7 +319,11 @@ function _vrRenderBody(co) {
       ? `<span class="ref_">مبلغ مسترد: ${_vrFmt(Math.abs(t.r15))} ر.س</span>`
       : `<span style="color:#8892a8">متوازن</span>`;
 
+  const warnHtml = [s.data.boundaryWarning, s.data.preConversionWarning]
+    .filter(Boolean).map(w => `<div class="vr-warn">⚠️ ${w}</div>`).join('');
+
   const html = `
+  ${warnHtml}
   <div class="vr-sec">أ — المخرجات</div>
   <table class="vr-tbl">
     <thead><tr><th style="width:20px">#</th><th>البيان</th>
@@ -393,9 +425,10 @@ function _vrRefresh(co) {
 // ── summary bar ───────────────────────────────────────────────────────────────
 function _vrRenderSummary() {
   const bar = document.getElementById('vr-summary-bar'); if (!bar) return;
-  const tA = _vrCalc('abaad'), tW = _vrCalc('wissam');
-  if (!tA && !tW) { bar.style.display = 'none'; return; }
-  const netA = tA ? tA.r15 : 0, netW = tW ? tW.r15 : 0, total = netA + netW;
+  const tA = _vrCalc('abaad'), tW = _vrCalc('wissam'), tSh = _vrCalc('abaad_sh');
+  if (!tA && !tW && !tSh) { bar.style.display = 'none'; return; }
+  const netA = tA ? tA.r15 : 0, netW = tW ? tW.r15 : 0, netSh = tSh ? tSh.r15 : 0;
+  const total = netA + netW + netSh;
   const cls  = v => v > .005 ? 'pay' : v < -.005 ? 'ref_' : '';
   bar.style.display = '';
   bar.innerHTML = `
@@ -403,6 +436,8 @@ function _vrRenderSummary() {
       <div class="vr-sum-val ${cls(netA)}">${_vrFmt(netA)} ر.س</div></div>` : ''}
     ${tW ? `<div><div class="vr-sum-lbl">صافي وسام (${VR.wissam.data.from.slice(0,7)}→${VR.wissam.data.to.slice(0,7)})</div>
       <div class="vr-sum-val ${cls(netW)}">${_vrFmt(netW)} ر.س</div></div>` : ''}
+    ${tSh ? `<div><div class="vr-sum-lbl">صافي شركة أبعاد (${VR.abaad_sh.data.from.slice(0,7)})</div>
+      <div class="vr-sum-val ${cls(netSh)}">${_vrFmt(netSh)} ر.س</div></div>` : ''}
     <div style="border-right:1px solid #C6A04A44;padding-right:20px;margin-right:10px">
       <div class="vr-sum-lbl">مجموع المجموعة</div>
       <div class="vr-sum-val ${cls(total)}" style="font-size:1rem">${_vrFmt(Math.abs(total))} ر.س</div>
@@ -410,7 +445,9 @@ function _vrRenderSummary() {
     ${tA ? `<div><div class="vr-sum-lbl">مخرجات أبعاد</div>
       <div class="vr-sum-val">${_vrFmt(tA.r12)} ر.س</div></div>` : ''}
     ${tW ? `<div><div class="vr-sum-lbl">مخرجات وسام</div>
-      <div class="vr-sum-val">${_vrFmt(tW.r12)} ر.س</div></div>` : ''}`;
+      <div class="vr-sum-val">${_vrFmt(tW.r12)} ر.س</div></div>` : ''}
+    ${tSh ? `<div><div class="vr-sum-lbl">مخرجات شركة أبعاد</div>
+      <div class="vr-sum-val">${_vrFmt(tSh.r12)} ر.س</div></div>` : ''}`;
 }
 
 // ── load ──────────────────────────────────────────────────────────────────────
@@ -436,8 +473,7 @@ async function _vrLoad(co) {
 }
 
 function _vrLoadBoth() {
-  _vrLoad('abaad');
-  _vrLoad('wissam');
+  VR_COMPANIES.forEach(_vrLoad);
   const st = document.getElementById('vr-status');
   if (st) st.textContent = `تحديث ${new Date().toLocaleTimeString('ar-SA')} · ${VR_VERSION}`;
 }
@@ -461,11 +497,12 @@ function _vrStartTimer() {
 
 // ── print (hides other panel via CSS class) ───────────────────────────────────
 function _vrPrint(co) {
-  const other = co === 'abaad' ? 'wissam' : 'abaad';
-  const panel = document.getElementById(`vr-panel-${other}`);
-  if (panel) panel.classList.add('vr-print-hide');
+  const others = VR_COMPANIES.filter(c => c !== co)
+    .map(c => document.getElementById(`vr-panel-${c}`))
+    .filter(Boolean);
+  others.forEach(panel => panel.classList.add('vr-print-hide'));
   window.print();
-  if (panel) panel.classList.remove('vr-print-hide');
+  others.forEach(panel => panel.classList.remove('vr-print-hide'));
 }
 
 // ── Excel export (ExcelJS — professional styling) ─────────────────────────────
@@ -484,7 +521,7 @@ async function _vrExcel(co) {
 async function _vrExcelBuild(co) {
   const s = VR[co];
   const r = s.data.rows, t = _vrCalc(co), ref = s.data.ref, a = s.adj;
-  const coName = co === 'abaad' ? 'أبعاد الحديد' : 'وسام الفولاذ';
+  const coName = co === 'wissam' ? 'وسام الفولاذ' : co === 'abaad_sh' ? 'شركة أبعاد الحديد' : 'أبعاد الحديد';
   const period = s.data.from + '  →  ' + s.data.to;
   const today  = new Date().toLocaleDateString('ar-SA', { year:'numeric', month:'long', day:'numeric' });
   const netLbl = t.r15 > .005 ? 'ضريبة مستحقة الدفع' : t.r15 < -.005 ? 'مبلغ مسترد' : 'متوازن';
@@ -753,6 +790,11 @@ function renderVatReturn() {
     document.getElementById('vr-from-wissam').value = qR.from;
     document.getElementById('vr-to-wissam').value   = qR.to;
     VR.wissam.from = qR.from; VR.wissam.to = qR.to;
+
+    // شركة أبعاد الحديد (Db4) → current month
+    document.getElementById('vr-from-abaad_sh').value = mR.from;
+    document.getElementById('vr-to-abaad_sh').value   = mR.to;
+    VR.abaad_sh.from = mR.from; VR.abaad_sh.to = mR.to;
 
     _vrBindEvents();
     _vrStartTimer();

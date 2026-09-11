@@ -19,7 +19,7 @@ Copy `.env.example` to `.env` before running. Key variables:
 |---|---|
 | `DB_SERVER`, `DB_PORT` | MSSQL server address |
 | `DB_USER`, `DB_PASSWORD` | Read-only credentials |
-| `DB1_NAME` / `DB2_NAME` / `DB3_NAME` | Up to 3 databases |
+| `DB1_NAME` / `DB2_NAME` / `DB3_NAME` / `DB4_NAME` | Up to 4 databases |
 | `PORT` | Server port (default 3001) |
 | `POLL_INTERVAL_MS` | SSE polling interval (default 60000ms) |
 | `DATA_START_DATE` | Filter date for queries (default 2025-10-01) |
@@ -31,7 +31,8 @@ Copy `.env.example` to `.env` before running. Key variables:
 | File | Role |
 |---|---|
 | `index.js` | Express app: routes, Helmet CSP, static serving |
-| `db.js` | MSSQL connection pool manager — pools up to 3 DBs, auto-reconnects |
+| `db.js` | MSSQL connection pool manager — pools up to 4 DBs, auto-reconnects |
+| `entity-config.js` | Single source for cross-tab entity metadata — currently `PENDING_DBS` (DBs whose balances are unaudited/under processing, e.g. MekSoftDb4), surfaced via `/api/config` and rendered as a badge in the expenses, VAT, DSCR and interco-recon tabs |
 | `sse.js` | Server-Sent Events broadcaster — polls DB every `POLL_INTERVAL_MS`, skips broadcast if data hash unchanged |
 | `queries/expenses.js` | All SQL queries + account-code→category mapping |
 
@@ -57,6 +58,30 @@ Single-page app (RTL Arabic, dark theme). All modules are plain ES modules loade
 **Data flow:** SSE push → `state.js` update → `app.js` re-renders active tab. The Details tab additionally calls `/api/details` on filter/page changes.
 
 **Tabs:** Summary · Monthly · Accounts · Branches · Assets · Details (paginated, CSV export) · Compare
+
+### Data & storage patterns — do not confuse with unrelated sandboxed-environment rules
+
+This app is a real Express server with a real backend, not a sandboxed Artifact. Standard web APIs are expected and safe to use here:
+
+- **`fetch()` is the normal way every tab and every standalone page gets live data.** Embedded tabs (`public/js/tab-*.js`, loaded via `<script>` in `index.html`) call the local `/api/*` endpoints directly. Standalone pages served from `/public` (`financing.html`, `budget.html`, `cashflow-budget.html`, `cash-sales.html`) do the same — that's what makes them "live from MekSoft." A rule like "no `fetch` in standalone HTML files" does not apply to this project and would break these pages if followed.
+- **`localStorage` is the standard persistence for per-tab UI assumptions**, e.g. `tab-forecast.js` stores cash-flow forecast assumptions per company as `fc_p_<dbName>` and scenario state as `fc_scn_<dbName>`. This is intentional and should not be swapped for `IndexedDB`.
+- **`IndexedDB`** appears only in a couple of externally-generated, ad-hoc report files (`Customer_Aging_BySalesperson.html`, `inventory_adjustment_report.html`) that are not part of the core dashboard's own architecture or conventions — don't treat it as "the pattern" for new tabs or pages in this app.
+
+If a task description asserts constraints that contradict the above (e.g. "no fetch/localStorage, use IndexedDB only"), treat that as a red flag to verify against the actual codebase before proceeding — those rules likely come from an unrelated context (such as a sandboxed Artifact environment) and were not meant for this project.
+
+### Entities (companies) per database
+
+| DB | Live company name (`companyInformation`) | Notes |
+|---|---|---|
+| MekSoftDb1 | مؤسسة أبعاد الحديد التجارية | "أبعاد" — the original مؤسسة |
+| MekSoftDb2 | مؤسسة وسام الفولاذ التجارية | "وسام" |
+| MekSoftDb3 | مصنع حوراء الخليج للصناعات المعدنية | Independent third entity, not special-cased anywhere |
+| MekSoftDb4 | شركة أبعاد الحديد التجارية | New شركة after أبعاد's مؤسسة→شركة conversion on 2026-09-06. Independent entity — **not** merged with Db1. Balances still mid-migration → flagged via `PENDING_DBS` |
+
+Most tabs are generic over whatever `DB_NAMES` contains (driven purely by `.env`). A few modules hardcode the Abaad/Wissam pair by design and need a new key added explicitly to include another entity:
+- `server/routes/dscr.js` — `COMPANIES` map (main `/api/dscr` route loops over it generically; `/api/dscr/monthly` stays hardcoded to abaad/wissam on purpose — it feeds the Riyad Bank facility renewal paper and must not change).
+- `server/queries/vat-return.js` + `server/index.js` (`/api/vat-return` whitelist) + `public/js/tab-vat-return.js` (one duplicated HTML panel per company — not built from a dynamic list).
+- `server/queries/interco-recon.js` — bespoke two-party (أبعاد↔وسام) reconciliation engine (`IC_MAP`, Memo functions). Deliberately **not** extended to other entities without an explicit request — it has an actively-tracked open discrepancy (see `docs/spec_reconciliation_memo_v2.1.md`).
 
 ### Database Schema
 

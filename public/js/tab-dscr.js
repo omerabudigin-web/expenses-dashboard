@@ -31,8 +31,8 @@ const DSCR_CSS = `
 .dscr-status-bar{font-size:.75rem;color:#7a9ab0;margin-top:2px}
 .dscr-refresh{background:#13284a;border:1px solid #C9A84C44;color:#C9A84C;padding:4px 12px;border-radius:6px;cursor:pointer;font-size:.8rem}
 .dscr-refresh:hover{background:#1d3a5c}
-.dscr-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
-@media(max-width:760px){.dscr-grid{grid-template-columns:1fr}}
+.dscr-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px;margin-bottom:14px}
+.dscr-pending-note{margin-top:10px;padding:8px 12px;background:#3d3000;border:1px solid #6e5000;border-radius:8px;font-size:.72rem;color:#f5c842;line-height:1.6}
 .dscr-card{background:#0f2038;border:1px solid #1e3a5a;border-radius:12px;padding:20px 22px}
 .dscr-card-title{font-size:.95rem;font-weight:700;color:#C9A84C;margin-bottom:14px}
 .dscr-err{color:#ff7a7a;font-size:.85rem;text-align:center;padding:20px}
@@ -78,23 +78,31 @@ function _dscrRenderCard(co) {
     </div>`;
   }
 
+  const real = _dscrColorSet(co.dscrTrue);
   const eco  = _dscrColorSet(co.dscrEconomic);
   const acc  = _dscrColorSet(co.dscrAccounting);
+  const rVal = co.dscrTrue      !== null ? co.dscrTrue.toFixed(2)      + '×' : '—';
   const eVal = co.dscrEconomic  !== null ? co.dscrEconomic.toFixed(2)  + '×' : '—';
   const aVal = co.dscrAccounting !== null ? co.dscrAccounting.toFixed(2) + '×' : '—';
 
   return `
   <div class="dscr-card">
-    <div class="dscr-card-title">${co.label}</div>
+    <div class="dscr-card-title">${co.label}${co.pending ? ' <span class="pending-db-badge">⚠️ أرصدة تحت المعالجة — غير معتمدة</span>' : ''}</div>
+    ${co.pending && co.pendingNote ? `<div class="dscr-pending-note">${co.pendingNote}</div>` : ''}
 
     <div class="dscr-block">
-      <div class="dscr-label-text">DSCR المستحق اقتصادياً</div>
-      <div class="dscr-primary" style="color:${eco.c}">${eVal}</div>
-      <div class="dscr-tag" style="color:${eco.c};background:${eco.bg}">${co.dscrEconomicLabel}</div>
+      <div class="dscr-label-text">DSCR الحقيقي (أصل + فائدة)</div>
+      <div class="dscr-primary" style="color:${real.c}">${rVal}</div>
+      <div class="dscr-tag" style="color:${real.c};background:${real.bg}">${co.dscrTrueLabel}</div>
     </div>
 
     <div class="dscr-secondary-wrap">
-      <span class="dscr-secondary-label">DSCR المسجَّل محاسبياً (MekSoft)</span>
+      <span class="dscr-secondary-label">DSCR المستحق اقتصادياً (فوائد فقط)</span>
+      <span class="dscr-secondary-value" style="color:${eco.c}">${eVal}</span>
+      <span class="dscr-secondary-tag" style="color:${eco.c};background:${eco.bg}">${co.dscrEconomicLabel}</span>
+    </div>
+    <div class="dscr-secondary-wrap">
+      <span class="dscr-secondary-label">DSCR المسجَّل محاسبياً (فوائد فقط، MekSoft)</span>
       <span class="dscr-secondary-value" style="color:${acc.c}">${aVal}</span>
       <span class="dscr-secondary-tag" style="color:${acc.c};background:${acc.bg}">${co.dscrAccountingLabel}</span>
     </div>
@@ -104,16 +112,19 @@ function _dscrRenderCard(co) {
     <div class="dscr-row"><span class="k">الفترة</span><span class="v">${co.period}</span></div>
     <div class="dscr-row"><span class="k">الإيرادات</span><span class="v">${_dscrFmt(co.revenue)} ر.س</span></div>
     <div class="dscr-row"><span class="k">الربح التشغيلي (قبل التمويل)</span><span class="v">${_dscrFmt(co.operatingProfit)} ر.س</span></div>
-    <div class="dscr-row"><span class="k">تكلفة التمويل — مستحق اقتصادياً</span><span class="v">${_dscrFmt(co.economicFinancingCost)} ر.س</span></div>
-    <div class="dscr-row"><span class="k">تكلفة التمويل — مسجَّل في MekSoft</span><span class="v" style="color:#7a9ab0">${_dscrFmt(co.accountingFinancingCost)} ر.س</span></div>
+    <div class="dscr-row"><span class="k">إجمالي خدمة الدين — أصل + فائدة</span><span class="v">${_dscrFmt(co.totalDebtService)} ر.س</span></div>
+    <div class="dscr-row"><span class="k">تكلفة التمويل — مستحق اقتصادياً (فوائد فقط)</span><span class="v" style="color:#7a9ab0">${_dscrFmt(co.economicFinancingCost)} ر.س</span></div>
+    <div class="dscr-row"><span class="k">تكلفة التمويل — مسجَّل في MekSoft (فوائد فقط)</span><span class="v" style="color:#7a9ab0">${_dscrFmt(co.accountingFinancingCost)} ر.س</span></div>
     <div class="dscr-row"><span class="k">فوائد غير مقيَّدة بعد</span><span class="v gap">${_dscrFmt(co.unrecordedGap)} ر.س</span></div>
     <div class="dscr-row"><span class="k">الفائدة المتبقية (عمر التسهيلات)</span><span class="v" style="color:#7a9ab0">${_dscrFmt(co.lifetimeRemainingInterest)} ر.س</span></div>
     <div class="dscr-row"><span class="k">عدد التسهيلات النشطة</span><span class="v">${co.loansCount}</span></div>
 
     <div class="dscr-gap-note">
-      <b>الفرق بين المؤشرَين</b> = فوائد مستحقة اقتصادياً على تسهيلات نصف سنوية/ربع سنوية
-      لم يحن موعد قيدها المحاسبي بعد. راجع <b>"الفائدة المتبقية على عمر التسهيلات"</b>
-      في سجل التمويلات لتفاصيل كل تسهيل.
+      <b>DSCR الحقيقي</b> = الربح التشغيلي ÷ (أصل الدين + الفوائد) المستحقَّين في نفس الفترة — هو التعريف
+      القياسي لتغطية خدمة الدين. المؤشرَان الآخران فوائد فقط (نسبة تغطية فوائد)، ولذلك يظهران دائماً أعلى.
+      إجمالي خدمة الدين محسوب من جدول الإطفاء الفعلي حيث متاح، وإلا فمن القسط الدوري (payment) مُقدَّراً
+      سنوياً وموزَّعاً على الفترة؛ التسهيلات ذات الدفعة الواحدة (بالون) تُحتسب فقط عند وقوع استحقاقها
+      داخل الفترة.
     </div>
   </div>`;
 }
@@ -134,13 +145,16 @@ async function _dscrLoad() {
     const cards = Object.values(data.companies).map(_dscrRenderCard).join('');
     const note = `
       <div class="dscr-full-note">
-        <b>كيف نقرأ هذين المؤشرَين؟</b><br>
-        • <b>DSCR المستحق اقتصادياً</b>: يُحسب على أساس تكلفة التمويل الفعلية لكل التسهيلات وفق جداول إطفائها
-          (شهري + نصف سنوي + ربع سنوي) — هذا هو الأصح لأي قرار استراتيجي.<br>
-        • <b>DSCR المسجَّل محاسبياً</b>: يعكس ما دُفع وقُيِّد فعلاً في MekSoft حتى الآن — مفيد للمطابقة مع
-          القوائم المالية الرسمية وسيرتفع تلقائياً عند تسجيل دفعات التسهيلات النصف سنوية.<br>
+        <b>كيف نقرأ الثلاثة مؤشرات؟</b><br>
+        • <b>DSCR الحقيقي (أصل + فائدة)</b>: الربح التشغيلي مقسوماً على إجمالي خدمة الدين الفعلية
+          (سداد أصل القروض + الفوائد) لكل التسهيلات — هذا هو تعريف DSCR القياسي، والأصح لأي قرار
+          استراتيجي أو مفاوضة تمويل.<br>
+        • <b>DSCR المستحق اقتصادياً / المسجَّل محاسبياً</b>: كلاهما فوائد فقط (نسبة تغطية فوائد، وليست
+          DSCR بالمعنى الدقيق) — الفرق بينهما أن الأول يشمل فوائد مستحقة على تسهيلات لم يحن قيدها
+          المحاسبي بعد، والثاني يعكس ما قُيِّد فعلاً في MekSoft. مفيدان للمطابقة المحاسبية، لكن كلاهما
+          يظهر أعلى من الحقيقي لأنهما يتجاهلان سداد الأصل.<br>
         • DSCR ≥ 1.5 = تغطية قوية &nbsp;|&nbsp; 1.0–1.5 = كافية لكن ضيقة &nbsp;|&nbsp;
-          &lt; 1.0 = خطر — التمويل يلتهم الربح التشغيلي أو أكثر.
+          &lt; 1.0 = خطر — خدمة الدين تلتهم الربح التشغيلي أو أكثر.
       </div>`;
 
     if (el) el.innerHTML = `<div class="dscr-grid">${cards}</div>${note}`;
