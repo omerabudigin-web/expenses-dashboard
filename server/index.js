@@ -1018,14 +1018,27 @@ app.get('/api/liabilities', async (req, res) => {
 });
 
 // ── Start ──────────────────────────────────────────────────────────────────────
+function listenWithRetry(retriesLeft = 5) {
+  const server = app.listen(PORT, () => {
+    console.log(`[app] expenses-dashboard → http://localhost:${PORT}`);
+    console.log(`[app] polling every ${POLL_MS / 1000}s  |  data from ${START_DATE}`);
+  });
+  server.on('error', err => {
+    if (err.code === 'EADDRINUSE' && retriesLeft > 0) {
+      console.error(`[app] port ${PORT} still in use (previous instance releasing it?) — retrying in 1s… (${retriesLeft} left)`);
+      setTimeout(() => listenWithRetry(retriesLeft - 1), 1000);
+    } else {
+      console.error('[app] failed to bind port', PORT, '—', err.message);
+      process.exit(1);
+    }
+  });
+}
+
 async function start() {
   console.log('[app] connecting to databases …');
   await connectAll();
 
-  app.listen(PORT, () => {
-    console.log(`[app] expenses-dashboard → http://localhost:${PORT}`);
-    console.log(`[app] polling every ${POLL_MS / 1000}s  |  data from ${START_DATE}`);
-  });
+  listenWithRetry();
 
   startPolling(START_DATE, POLL_MS);
 }

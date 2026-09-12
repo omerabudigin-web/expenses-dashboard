@@ -61,6 +61,9 @@ async function connectAll() {
       console.log(`[db] connected → ${name}`);
     })
   );
+  results.forEach((r, i) => {
+    if (r.status === 'rejected') console.error(`[db] connection failed → ${DB_NAMES[i]}:`, r.reason.message);
+  });
   const ok = results.filter(r => r.status === 'fulfilled').length;
   if (ok === 0) console.error('[db] no databases reachable — server will retry on demand');
 }
