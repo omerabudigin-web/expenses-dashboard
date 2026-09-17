@@ -55,7 +55,7 @@ function _faStartAuto() {
     } else {
       _faCountdown = FA_REFRESH_SEC;
       _faSetStatus('🔄 جارٍ التحديث…', '#a87d00');
-      const db = State.get('db');
+      const db = State.get('activeDb');
       try {
         const data = await fetch(`/api/fixed-assets?db=${encodeURIComponent(db)}`).then(r => r.json());
         if (data.error) throw new Error(data.error);
@@ -76,7 +76,7 @@ async function renderFixedAssetsTab() {
   if (!wrap) return;
   if (!wrap.innerHTML.trim()) _faBuildShell(wrap);
 
-  const db = State.get('db');
+  const db = State.get('activeDb');
   _faSetStatus('⏳ جارٍ تحميل بيانات الأصول الثابتة…', '#a87d00');
 
   try {
@@ -290,6 +290,9 @@ table.fa-tbl .branch-badge{
   wrap.querySelector('#fa-btn-excel').addEventListener('click', () => _faExportExcel());
   wrap.querySelector('#fa-btn-pdf').addEventListener('click',   () => _faPrint('pdf'));
   wrap.querySelector('#fa-btn-print').addEventListener('click', () => _faPrint('print'));
+
+  // إعادة تحميل تلقائية عند تبديل قاعدة البيانات من المحدد العلوي
+  State.on('activeDb', () => { if (_faData) renderFixedAssetsTab(); });
 }
 
 /* ── Expand / collapse all ── */

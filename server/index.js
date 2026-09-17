@@ -20,7 +20,7 @@ const { getCashSales }                                         = require('./quer
 const { getBudget }                                            = require('./queries/budget');
 const { getCashFlowBudget }                                    = require('./queries/cashflow');
 const { getAgingData, getSupplierAgingData }                   = require('./queries/aging');
-const { getFixedAssets }                                       = require('./queries/fixed-assets');
+const { getFixedAssets, getFixedAssetsMovement }               = require('./queries/fixed-assets');
 const { getStockData, getWarehouses }                          = require('./queries/stock');
 const { getSafetyData }                                        = require('./queries/safety');
 const { getCoilsData }                                         = require('./queries/coils');
@@ -713,6 +713,25 @@ app.get('/api/fixed-assets', async (req, res) => {
     res.json(data);
   } catch (err) {
     console.error('[api/fixed-assets]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /api/fixed-assets-movement?db=&periodStart=&asOf= ────────────────────
+// إيضاح حركة الأصول الثابتة (تكلفة): رصيد أول المدة / إضافات / استبعادات / رصيد آخر المدة
+app.get('/api/fixed-assets-movement', async (req, res) => {
+  const dbName = resolveDb(req.query);
+  const asOf = /^\d{4}-\d{2}-\d{2}$/.test(req.query.asOf || '')
+    ? req.query.asOf
+    : new Date().toISOString().slice(0, 10);
+  const periodStart = /^\d{4}-\d{2}-\d{2}$/.test(req.query.periodStart || '')
+    ? req.query.periodStart
+    : `${asOf.slice(0, 4)}-01-01`;
+  try {
+    const data = await getFixedAssetsMovement(dbName, periodStart, asOf);
+    res.json({ periodStart, asOf, rows: data });
+  } catch (err) {
+    console.error('[api/fixed-assets-movement]', err.message);
     res.status(500).json({ error: err.message });
   }
 });

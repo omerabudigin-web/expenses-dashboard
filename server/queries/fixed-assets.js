@@ -49,4 +49,56 @@ async function getFixedAssets(dbName) {
   }));
 }
 
-module.exports = { getFixedAssets };
+// ── حركة الأصول الثابتة (تكلفة فقط) — رصيد أول المدة / إضافات / استبعادات /
+// رصيد آخر المدة، بأسلوب إيضاح القوائم المالية. الاستبعادات هنا هي فقط
+// الدائن على حساب غير حساب الإهلاك المخصص (مرتجعات/تصحيحات تكلفة) — لا تشمل
+// الإهلاك، تماماً كتصنيف accumDepr/adjustments في getFixedAssets أعلاه.
+async function getFixedAssetsMovement(dbName, periodStart, asOf) {
+  const pool = await getPool(dbName);
+  const result = await pool.request().query(`
+    SELECT
+      fa.Id,
+      fa.NameAr,
+      fac.NameAr AS CategoryName,
+      CONVERT(varchar(10), fa.AcquisitionDate, 23) AS AcquisitionDate,
+      SUM(CASE WHEN CAST(jvh.TransactionDate AS DATE) < '${periodStart}'
+               THEN ISNULL(jd.Debit, 0) ELSE 0 END) AS OpeningDebit,
+      SUM(CASE WHEN CAST(jvh.TransactionDate AS DATE) < '${periodStart}'
+                 AND (jd.AccountChart <> fa.DepreciationAccount OR fa.DepreciationAccount IS NULL)
+               THEN ISNULL(jd.Credit, 0) ELSE 0 END) AS OpeningCostCredit,
+      SUM(CASE WHEN CAST(jvh.TransactionDate AS DATE) BETWEEN '${periodStart}' AND '${asOf}'
+               THEN ISNULL(jd.Debit, 0) ELSE 0 END) AS Additions,
+      SUM(CASE WHEN CAST(jvh.TransactionDate AS DATE) BETWEEN '${periodStart}' AND '${asOf}'
+                 AND (jd.AccountChart <> fa.DepreciationAccount OR fa.DepreciationAccount IS NULL)
+               THEN ISNULL(jd.Credit, 0) ELSE 0 END) AS Disposals,
+      COUNT(jd.ID) AS JVLines
+    FROM FixedAsset fa
+    LEFT JOIN FixedAssetCategory fac ON fac.ID = fa.Category
+    LEFT JOIN JournalVoucherDetail jd ON jd.FixedAsset = fa.Id
+    LEFT JOIN AccountChart ac ON ac.ID = jd.AccountChart
+    LEFT JOIN JournalVoucherHeader jvh ON jvh.ID = jd.HeaderID
+      AND CAST(jvh.TransactionDate AS DATE) <= '${asOf}'
+    WHERE jd.ID IS NULL OR ac.Code LIKE '1%'
+    GROUP BY fa.Id, fa.NameAr, fac.NameAr, fa.AcquisitionDate
+    ORDER BY fa.NameAr
+  `);
+
+  return result.recordset.map(r => {
+    const opening  = +(r.OpeningDebit || 0) - +(r.OpeningCostCredit || 0);
+    const additions = +(r.Additions || 0);
+    const disposals = +(r.Disposals || 0);
+    return {
+      id:              r.Id,
+      nameAr:          (r.NameAr || '').trim(),
+      categoryName:    (r.CategoryName || '').trim(),
+      acquisitionDate: r.AcquisitionDate || null,
+      opening,
+      additions,
+      disposals,
+      closing: opening + additions - disposals,
+      jvLines: r.JVLines || 0,
+    };
+  });
+}
+
+module.exports = { getFixedAssets, getFixedAssetsMovement };
