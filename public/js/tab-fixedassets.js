@@ -322,11 +322,12 @@ function _faRender() {
   rows.forEach(r => {
     if (!byId.has(r.id)) byId.set(r.id, { ...r, branches: [] });
     const e = byId.get(r.id);
-    e.branches.push({ branch: r.branch, branchName: r.branchName, bookValue: r.bookValue, accumDepr: r.accumDepr, netBookValue: r.netBookValue });
+    e.branches.push({ branch: r.branch, branchName: r.branchName, bookValue: r.bookValue, accumDepr: r.accumDepr, adjustments: r.adjustments, netBookValue: r.netBookValue });
     // aggregate when multiple branches
     if (e.branches.length > 1) {
       e.bookValue    = e.branches.reduce((s,b)=>s+b.bookValue,0);
       e.accumDepr    = e.branches.reduce((s,b)=>s+b.accumDepr,0);
+      e.adjustments  = e.branches.reduce((s,b)=>s+(b.adjustments||0),0);
       e.netBookValue = e.branches.reduce((s,b)=>s+b.netBookValue,0);
     }
   });
@@ -344,11 +345,13 @@ function _faRender() {
   const totAssets   = assets.length;
   const totValue    = assets.reduce((s,a)=>s+a.bookValue,0);
   const totDepr     = assets.reduce((s,a)=>s+a.accumDepr,0);
+  const totAdj      = assets.reduce((s,a)=>s+(a.adjustments||0),0);
   const totNet      = assets.reduce((s,a)=>s+a.netBookValue,0);
   wrap.querySelector('#fa-kpis').innerHTML = `
     <div class="fa-kpi"><label>عدد الأصول</label><div class="fa-val">${totAssets}</div></div>
     <div class="fa-kpi"><label>إجمالي التكلفة (ر.س)</label><div class="fa-val">${FA_FMT(totValue)}</div></div>
     <div class="fa-kpi"><label>إجمالي الإهلاك المتراكم (ر.س)</label><div class="fa-val">${FA_FMT(totDepr)}</div></div>
+    ${totAdj ? `<div class="fa-kpi"><label>تسويات/مرتجعات على التكلفة (ر.س)</label><div class="fa-val">${FA_FMT(totAdj)}</div></div>` : ''}
     <div class="fa-kpi green"><label>صافي القيمة الدفترية (ر.س)</label><div class="fa-val">${FA_FMT(totNet)}</div></div>
   `;
 
@@ -384,6 +387,7 @@ function _faRender() {
           <th>الفرع</th>
           <th>التكلفة</th>
           <th>إهلاك متراكم</th>
+          <th>تسويات/مرتجعات</th>
           <th>صافي الدفتري</th>
         </tr>
       </thead>
@@ -401,12 +405,14 @@ function _faRender() {
             <td>${branchBadges}</td>
             <td class="num hi">${FA_FMT(a.bookValue)}</td>
             <td class="num">${a.accumDepr ? FA_FMT(a.accumDepr) : '—'}</td>
+            <td class="num">${a.adjustments ? FA_FMT(a.adjustments) : '—'}</td>
             <td class="num">${FA_FMT(a.netBookValue)}</td>
           </tr>`;
         }).join('')}
         <tr class="fa-group-total">
           <td class="col-lbl" colspan="3">إجمالي ${FA_ESC(t.label)}</td>
           <td class="num">${FA_FMT(gTotal)}</td>
+          <td class="num">—</td>
           <td class="num">—</td>
           <td class="num">${FA_FMT(gNet)}</td>
         </tr>
@@ -531,10 +537,11 @@ function _faGetFilteredGroups() {
   rows.forEach(r => {
     if (!byId.has(r.id)) byId.set(r.id, { ...r, branches: [] });
     const e = byId.get(r.id);
-    e.branches.push({ branch: r.branch, branchName: r.branchName, bookValue: r.bookValue, accumDepr: r.accumDepr, netBookValue: r.netBookValue });
+    e.branches.push({ branch: r.branch, branchName: r.branchName, bookValue: r.bookValue, accumDepr: r.accumDepr, adjustments: r.adjustments, netBookValue: r.netBookValue });
     if (e.branches.length > 1) {
       e.bookValue    = e.branches.reduce((s,b)=>s+b.bookValue,0);
       e.accumDepr    = e.branches.reduce((s,b)=>s+b.accumDepr,0);
+      e.adjustments  = e.branches.reduce((s,b)=>s+(b.adjustments||0),0);
       e.netBookValue = e.branches.reduce((s,b)=>s+b.netBookValue,0);
     }
   });
@@ -551,8 +558,9 @@ function _faGetFilteredGroups() {
 
   const totValue = assets.reduce((s,a)=>s+a.bookValue,0);
   const totDepr  = assets.reduce((s,a)=>s+a.accumDepr,0);
+  const totAdj   = assets.reduce((s,a)=>s+(a.adjustments||0),0);
   const totNet   = assets.reduce((s,a)=>s+a.netBookValue,0);
-  return { groups, assets, totValue, totDepr, totNet };
+  return { groups, assets, totValue, totDepr, totAdj, totNet };
 }
 
 /* ── Print / PDF ── */
@@ -589,7 +597,7 @@ async function _faExportExcel() {
 
   const d = _faGetFilteredGroups();
   if (!d) return;
-  const { groups, totValue, totDepr, totNet } = d;
+  const { groups, totValue, totDepr, totAdj, totNet } = d;
 
   const BRANCH_NAMES = { 0:'كل الفروع', 1:'الفرع الرئيسي', 2:'مصنع حوراء', 3:'شقق داماس الرياض', 4:'شقق داماس خميس مشيط', 5:'فندق واحة جدة' };
   const company = State.get('companyName') || 'مؤسسة أبعاد الحديد التجارية';
@@ -626,6 +634,7 @@ async function _faExportExcel() {
     { width: 22 },  // الفرع
     { width: 18 },  // التكلفة
     { width: 18 },  // إهلاك متراكم
+    { width: 18 },  // تسويات/مرتجعات
     { width: 18 },  // صافي الدفتري
   ];
 
@@ -642,19 +651,19 @@ async function _faExportExcel() {
   const rtlAlign = { horizontal:'right', vertical:'middle', readingOrder:2 };
 
   // ── Title ──────────────────────────────────────────────────────────────────
-  const r1 = ws.addRow(['جدول الأصول الثابتة', '', '', '', '', '']);
-  ws.mergeCells(`A${r1.number}:F${r1.number}`);
+  const r1 = ws.addRow(['جدول الأصول الثابتة', '', '', '', '', '', '']);
+  ws.mergeCells(`A${r1.number}:G${r1.number}`);
   r1.getCell('A').font  = { name:FONT, bold:true, size:16, color:{ argb:CLR.navy } };
   r1.getCell('A').alignment = cenAlign;
   r1.height = 28;
 
-  const r2 = ws.addRow([company, '', '', '', '', '']);
-  ws.mergeCells(`A${r2.number}:F${r2.number}`);
+  const r2 = ws.addRow([company, '', '', '', '', '', '']);
+  ws.mergeCells(`A${r2.number}:G${r2.number}`);
   r2.getCell('A').font = { name:FONT, size:11, color:{ argb:'FF334466' } };
   r2.getCell('A').alignment = cenAlign;
 
-  const r3 = ws.addRow([`الفرع: ${branch}   |   تاريخ التقرير: ${dateStr}`, '', '', '', '', '']);
-  ws.mergeCells(`A${r3.number}:F${r3.number}`);
+  const r3 = ws.addRow([`الفرع: ${branch}   |   تاريخ التقرير: ${dateStr}`, '', '', '', '', '', '']);
+  ws.mergeCells(`A${r3.number}:G${r3.number}`);
   r3.getCell('A').font = { name:FONT, size:10, color:{ argb:'FF667788' } };
   r3.getCell('A').alignment = cenAlign;
   r3.height = 18;
@@ -662,7 +671,7 @@ async function _faExportExcel() {
   ws.addRow([]);
 
   // ── Column headers ─────────────────────────────────────────────────────────
-  const hRow = ws.addRow(['اسم الأصل', 'تاريخ الاقتناء', 'الفرع', 'التكلفة (ر.س)', 'إهلاك متراكم (ر.س)', 'صافي القيمة (ر.س)']);
+  const hRow = ws.addRow(['اسم الأصل', 'تاريخ الاقتناء', 'الفرع', 'التكلفة (ر.س)', 'إهلاك متراكم (ر.س)', 'تسويات/مرتجعات (ر.س)', 'صافي القيمة (ر.س)']);
   hRow.height = 22;
   hRow.eachCell(c => {
     c.fill = hdrFill; c.font = hdrFont;
@@ -676,7 +685,7 @@ async function _faExportExcel() {
     // group header
     const gTotal  = g.list.reduce((s,a)=>s+a.bookValue,0);
     const gNet    = g.list.reduce((s,a)=>s+a.netBookValue,0);
-    const gRow = ws.addRow([`${g.icon}  ${g.label}  (${g.list.length} أصل)`, '', '', gTotal, '', gNet]);
+    const gRow = ws.addRow([`${g.icon}  ${g.label}  (${g.list.length} أصل)`, '', '', gTotal, '', '', gNet]);
     ws.mergeCells(`A${gRow.number}:C${gRow.number}`);
     gRow.height = 20;
     gRow.eachCell((c,i) => {
@@ -688,7 +697,7 @@ async function _faExportExcel() {
     // asset rows
     g.list.forEach(a => {
       const branchStr = a.branches.map(b=>b.branchName||'').filter(Boolean).join(' / ') || '—';
-      const dRow = ws.addRow([a.nameAr, a.acquisitionDate||'—', branchStr, a.bookValue, a.accumDepr||0, a.netBookValue]);
+      const dRow = ws.addRow([a.nameAr, a.acquisitionDate||'—', branchStr, a.bookValue, a.accumDepr||0, a.adjustments||0, a.netBookValue]);
       dRow.height = 17;
       dRow.getCell(1).alignment = rtlAlign;
       dRow.getCell(2).alignment = cenAlign;
@@ -696,19 +705,21 @@ async function _faExportExcel() {
       dRow.getCell(4).numFmt = numFmt; dRow.getCell(4).alignment = numAlign;
       dRow.getCell(5).numFmt = numFmt; dRow.getCell(5).alignment = numAlign;
       dRow.getCell(6).numFmt = numFmt; dRow.getCell(6).alignment = numAlign;
+      dRow.getCell(7).numFmt = numFmt; dRow.getCell(7).alignment = numAlign;
       dRow.getCell(1).font = { name:FONT, size:10 };
       dRow.getCell(2).font = { name:FONT, size:10, color:{ argb:'FF667788' } };
       dRow.getCell(3).font = { name:FONT, size:10, color:{ argb:'FF334466' } };
       dRow.getCell(4).font = { name:FONT, size:10, bold:true, color:{ argb:'FF0A2040' } };
       dRow.getCell(5).font = { name:FONT, size:10, color:{ argb:'FF445566' } };
-      dRow.getCell(6).font = { name:FONT, size:10, bold:true, color:{ argb:'FF1a7a3c' } };
+      dRow.getCell(6).font = { name:FONT, size:10, color:{ argb:'FF445566' } };
+      dRow.getCell(7).font = { name:FONT, size:10, bold:true, color:{ argb:'FF1a7a3c' } };
       // alternating fill
       const altFill = { type:'pattern', pattern:'solid', fgColor:{ argb: CLR.bluePale } };
-      if (g.list.indexOf(a) % 2 === 1) [1,2,3,4,5,6].forEach(i => { dRow.getCell(i).fill = altFill; });
+      if (g.list.indexOf(a) % 2 === 1) [1,2,3,4,5,6,7].forEach(i => { dRow.getCell(i).fill = altFill; });
     });
 
     // subtotal row
-    const sRow = ws.addRow([`إجمالي ${g.label}`, '', '', gTotal, 0, gNet]);
+    const sRow = ws.addRow([`إجمالي ${g.label}`, '', '', gTotal, 0, 0, gNet]);
     ws.mergeCells(`A${sRow.number}:C${sRow.number}`);
     sRow.height = 18;
     sRow.eachCell((c,i) => {
@@ -722,7 +733,7 @@ async function _faExportExcel() {
   });
 
   // ── Grand total ────────────────────────────────────────────────────────────
-  const gtRow = ws.addRow(['الإجمالي الكلي', '', '', totValue, totDepr, totNet]);
+  const gtRow = ws.addRow(['الإجمالي الكلي', '', '', totValue, totDepr, totAdj, totNet]);
   ws.mergeCells(`A${gtRow.number}:C${gtRow.number}`);
   gtRow.height = 24;
   gtRow.eachCell((c,i) => {
