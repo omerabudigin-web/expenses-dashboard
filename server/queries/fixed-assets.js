@@ -61,6 +61,8 @@ async function getFixedAssetsMovement(dbName, periodStart, asOf) {
       fa.NameAr,
       fac.NameAr AS CategoryName,
       CONVERT(varchar(10), fa.AcquisitionDate, 23) AS AcquisitionDate,
+      jd.Branch,
+      b.NameAr AS BranchName,
       SUM(CASE WHEN CAST(jvh.TransactionDate AS DATE) < '${periodStart}'
                THEN ISNULL(jd.Debit, 0) ELSE 0 END) AS OpeningDebit,
       SUM(CASE WHEN CAST(jvh.TransactionDate AS DATE) < '${periodStart}'
@@ -78,9 +80,10 @@ async function getFixedAssetsMovement(dbName, periodStart, asOf) {
     LEFT JOIN AccountChart ac ON ac.ID = jd.AccountChart
     LEFT JOIN JournalVoucherHeader jvh ON jvh.ID = jd.HeaderID
       AND CAST(jvh.TransactionDate AS DATE) <= '${asOf}'
+    LEFT JOIN Branch b ON b.Id = jd.Branch
     WHERE jd.ID IS NULL OR ac.Code LIKE '1%'
-    GROUP BY fa.Id, fa.NameAr, fac.NameAr, fa.AcquisitionDate
-    ORDER BY fa.NameAr
+    GROUP BY fa.Id, fa.NameAr, fac.NameAr, fa.AcquisitionDate, jd.Branch, b.NameAr
+    ORDER BY jd.Branch, fa.NameAr
   `);
 
   return result.recordset.map(r => {
@@ -92,6 +95,8 @@ async function getFixedAssetsMovement(dbName, periodStart, asOf) {
       nameAr:          (r.NameAr || '').trim(),
       categoryName:    (r.CategoryName || '').trim(),
       acquisitionDate: r.AcquisitionDate || null,
+      branch:          r.Branch,
+      branchName:      r.BranchName || null,
       opening,
       additions,
       disposals,

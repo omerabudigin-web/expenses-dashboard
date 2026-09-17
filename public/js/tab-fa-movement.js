@@ -21,9 +21,19 @@ function famTypeOf(name) {
 const FAM_FMT = n => (+n||0).toLocaleString('en-US', { minimumFractionDigits:2, maximumFractionDigits:2 });
 const FAM_ESC = s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
+const FAM_BRANCHES = [
+  { id:0, name:'كل الفروع' },
+  { id:1, name:'الفرع الرئيسي' },
+  { id:2, name:'مصنع حوراء' },
+  { id:3, name:'شقق داماس الرياض' },
+  { id:4, name:'شقق داماس خميس مشيط' },
+  { id:5, name:'فندق واحة جدة' },
+];
+
 let _famRows     = null;
 let _famPeriod   = null; // { periodStart, asOf }
 let _famExpanded = new Set();
+let _famFilter   = 0; // branch id, 0 = كل الفروع
 
 async function renderFaMovementTab() {
   const wrap = document.getElementById('tab-fa-movement');
@@ -45,6 +55,14 @@ function _famBuildShell(wrap) {
 .fam-year-sel{background:#0d1b2a;border:1px solid #1e3a5f;border-radius:6px;color:#e8edf5;font-family:Tajawal,sans-serif;font-size:.85rem;padding:4px 10px}
 .fam-export-btn{padding:5px 14px;border-radius:6px;font-family:Tajawal,sans-serif;font-size:.82rem;cursor:pointer;border:1px solid #27ae60;color:#27ae60;background:transparent}
 .fam-export-btn:hover{background:#0d2a1a}
+
+.fam-filters{display:flex;align-items:center;gap:10px;padding:10px 18px;background:#111e2d;border-bottom:1px solid #1a2d42;flex-wrap:wrap}
+.fam-filters label{font-size:.82rem;color:#8a9bb5}
+.fam-chip-group{display:flex;gap:6px;flex-wrap:wrap}
+.fam-chip{padding:4px 13px;border-radius:20px;font-size:.8rem;cursor:pointer;border:1px solid #1e3a5f;background:#162032;color:#8a9bb5;transition:.15s}
+.fam-chip:hover{border-color:#d4a017;color:#d4a017}
+.fam-chip.active{background:#d4a017;color:#000;border-color:#d4a017;font-weight:700}
+.fam-branch-badge{display:inline-block;font-size:.7rem;padding:2px 8px;border-radius:10px;background:rgba(30,58,95,.6);color:#7ab4e0;border:1px solid #1e3a5f;margin:1px}
 
 .fam-kpis{display:flex;gap:12px;padding:14px 18px;flex-wrap:wrap}
 .fam-kpi{background:#162032;border:1px solid #1e3a5f;border-radius:10px;padding:12px 20px;min-width:180px;text-align:center;position:relative;overflow:hidden}
@@ -98,6 +116,11 @@ table.fam-tbl tr.fam-grand td{background:#111e2d;font-weight:800;border-top:2px 
   <button class="fam-export-btn" id="fam-btn-excel">📊 Excel</button>
 </div>
 
+<div class="fam-filters">
+  <label>الفرع:</label>
+  <div class="fam-chip-group" id="fam-branch-chips"></div>
+</div>
+
 <div class="fam-kpis" id="fam-kpis"></div>
 <div class="fam-note" id="fam-note"></div>
 <div class="fam-body" id="fam-body"></div>
@@ -105,6 +128,22 @@ table.fam-tbl tr.fam-grand td{background:#111e2d;font-weight:800;border-top:2px 
 
   wrap.querySelector('#fam-year-sel').addEventListener('change', () => _famLoad());
   wrap.querySelector('#fam-btn-excel').addEventListener('click', () => _famExportExcel());
+
+  // Branch chips
+  const chipGroup = wrap.querySelector('#fam-branch-chips');
+  FAM_BRANCHES.forEach(b => {
+    const chip = document.createElement('div');
+    chip.className = 'fam-chip' + (b.id === 0 ? ' active' : '');
+    chip.textContent = b.name;
+    chip.dataset.branch = b.id;
+    chip.addEventListener('click', () => {
+      wrap.querySelectorAll('#fam-branch-chips .fam-chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      _famFilter = b.id;
+      _famRender();
+    });
+    chipGroup.appendChild(chip);
+  });
 
   // إعادة تحميل تلقائية عند تبديل قاعدة البيانات من المحدد العلوي
   State.on('activeDb', () => { if (_famRows) _famLoad(); });
@@ -133,8 +172,28 @@ async function _famLoad() {
   }
 }
 
+// يفلتر حسب الفرع المختار، ويدمج الأصل الواحد عبر أكثر من فرع عند اختيار "كل الفروع"
+function _famFilteredRows() {
+  let rows = (_famRows || []).filter(r => r.jvLines > 0 || r.opening || r.additions || r.disposals || r.closing);
+  if (_famFilter) rows = rows.filter(r => r.branch === _famFilter);
+
+  const byId = new Map();
+  rows.forEach(r => {
+    if (!byId.has(r.id)) byId.set(r.id, { ...r, branches: [] });
+    const e = byId.get(r.id);
+    e.branches.push({ branch: r.branch, branchName: r.branchName, opening: r.opening, additions: r.additions, disposals: r.disposals, closing: r.closing });
+    if (e.branches.length > 1) {
+      e.opening   = e.branches.reduce((s,b)=>s+b.opening,0);
+      e.additions = e.branches.reduce((s,b)=>s+b.additions,0);
+      e.disposals = e.branches.reduce((s,b)=>s+b.disposals,0);
+      e.closing   = e.branches.reduce((s,b)=>s+b.closing,0);
+    }
+  });
+  return [...byId.values()];
+}
+
 function _famGroups() {
-  const rows = (_famRows || []).filter(r => r.jvLines > 0 || r.opening || r.additions || r.disposals || r.closing);
+  const rows = _famFilteredRows();
   const grouped = new Map();
   FAM_TYPES.forEach(t => grouped.set(t.key, []));
   rows.forEach(r => grouped.get(famTypeOf(r.nameAr)).push(r));
@@ -188,16 +247,22 @@ function _famRender() {
 
     html += `<tr class="fam-detail-row ${isOpen ? 'open' : ''}" id="fam-det-${g.key}"><td colspan="6" style="padding:0">
       <table class="fam-tbl" style="border:none;border-radius:0">
-        <thead><tr><th class="col-lbl">اسم الأصل</th><th>تاريخ الاقتناء</th><th>أول المدة</th><th>إضافات</th><th>استبعادات</th><th>آخر المدة</th></tr></thead>
+        <thead><tr><th class="col-lbl">اسم الأصل</th><th>تاريخ الاقتناء</th><th>الفرع</th><th>أول المدة</th><th>إضافات</th><th>استبعادات</th><th>آخر المدة</th></tr></thead>
         <tbody>
-          ${g.list.map(r => `<tr>
+          ${g.list.map(r => {
+            const branchBadges = _famFilter
+              ? (r.branchName ? `<span class="fam-branch-badge">${FAM_ESC(r.branchName)}</span>` : '—')
+              : r.branches.map(b => b.branchName ? `<span class="fam-branch-badge">${FAM_ESC(b.branchName)}</span>` : '').join(' ') || '—';
+            return `<tr>
             <td class="col-lbl">${FAM_ESC(r.nameAr)}</td>
             <td>${r.acquisitionDate || '—'}</td>
+            <td>${branchBadges}</td>
             <td class="num">${FAM_FMT(r.opening)}</td>
             <td class="num add">${r.additions ? FAM_FMT(r.additions) : '—'}</td>
             <td class="num disp">${r.disposals ? FAM_FMT(r.disposals) : '—'}</td>
             <td class="num close">${FAM_FMT(r.closing)}</td>
-          </tr>`).join('')}
+          </tr>`;
+          }).join('')}
         </tbody>
       </table>
     </td></tr>`;
@@ -254,30 +319,31 @@ async function _famExportExcel() {
   ws.pageSetup.fitToPage = true; ws.pageSetup.fitToWidth = 1;
 
   ws.columns = [
-    { width: 42 }, { width: 14 }, { width: 18 }, { width: 18 }, { width: 18 }, { width: 18 },
+    { width: 42 }, { width: 14 }, { width: 22 }, { width: 18 }, { width: 18 }, { width: 18 }, { width: 18 },
   ];
 
   const cenAlign = { horizontal:'center', vertical:'middle' };
   const rtlAlign = { horizontal:'right', vertical:'middle', readingOrder:2 };
   const numAlign = { horizontal:'right', vertical:'middle' };
 
-  const r1 = ws.addRow(['إيضاح حركة الأصول الثابتة (تكلفة)', '', '', '', '', '']);
-  ws.mergeCells(`A${r1.number}:F${r1.number}`);
+  const r1 = ws.addRow(['إيضاح حركة الأصول الثابتة (تكلفة)', '', '', '', '', '', '']);
+  ws.mergeCells(`A${r1.number}:G${r1.number}`);
   r1.getCell('A').font = { name:FONT, bold:true, size:16, color:{ argb:CLR.navy } };
   r1.getCell('A').alignment = cenAlign; r1.height = 28;
 
-  const r2 = ws.addRow([company, '', '', '', '', '']);
-  ws.mergeCells(`A${r2.number}:F${r2.number}`);
+  const r2 = ws.addRow([company, '', '', '', '', '', '']);
+  ws.mergeCells(`A${r2.number}:G${r2.number}`);
   r2.getCell('A').font = { name:FONT, size:11, color:{ argb:'FF334466' } };
   r2.getCell('A').alignment = cenAlign;
 
-  const r3 = ws.addRow([`من ${_famPeriod.periodStart} إلى ${_famPeriod.asOf}`, '', '', '', '', '']);
-  ws.mergeCells(`A${r3.number}:F${r3.number}`);
+  const branchLbl = (FAM_BRANCHES.find(b => b.id === _famFilter) || FAM_BRANCHES[0]).name;
+  const r3 = ws.addRow([`من ${_famPeriod.periodStart} إلى ${_famPeriod.asOf}   |   الفرع: ${branchLbl}`, '', '', '', '', '', '']);
+  ws.mergeCells(`A${r3.number}:G${r3.number}`);
   r3.getCell('A').font = { name:FONT, size:10, color:{ argb:'FF667788' } };
   r3.getCell('A').alignment = cenAlign; r3.height = 18;
   ws.addRow([]);
 
-  const hRow = ws.addRow(['التصنيف / الأصل', 'تاريخ الاقتناء', 'رصيد أول المدة (ر.س)', 'إضافات (ر.س)', 'استبعادات (ر.س)', 'رصيد آخر المدة (ر.س)']);
+  const hRow = ws.addRow(['التصنيف / الأصل', 'تاريخ الاقتناء', 'الفرع', 'رصيد أول المدة (ر.س)', 'إضافات (ر.س)', 'استبعادات (ر.س)', 'رصيد آخر المدة (ر.س)']);
   hRow.height = 22;
   hRow.eachCell(c => {
     c.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:CLR.navy } };
@@ -292,33 +358,35 @@ async function _famExportExcel() {
     const gDisp  = g.list.reduce((s,r)=>s+r.disposals,0);
     const gClose = g.list.reduce((s,r)=>s+r.closing,0);
 
-    const gRow = ws.addRow([`${g.icon} ${g.label} (${g.list.length} أصل)`, '', gOpen, gAdd, gDisp, gClose]);
+    const gRow = ws.addRow([`${g.icon} ${g.label} (${g.list.length} أصل)`, '', '', gOpen, gAdd, gDisp, gClose]);
     gRow.eachCell((c,i) => {
       c.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:CLR.navyMid } };
       c.font = { name:FONT, bold:true, color:{ argb:CLR.white }, size:10 };
-      c.alignment = i <= 2 ? rtlAlign : numAlign;
-      if (i >= 3) c.numFmt = numFmt;
+      c.alignment = i <= 3 ? rtlAlign : numAlign;
+      if (i >= 4) c.numFmt = numFmt;
     });
 
     g.list.forEach((r, idx) => {
-      const dRow = ws.addRow([r.nameAr, r.acquisitionDate||'—', r.opening, r.additions, r.disposals, r.closing]);
+      const branchStr = r.branches.map(b=>b.branchName||'').filter(Boolean).join(' / ') || '—';
+      const dRow = ws.addRow([r.nameAr, r.acquisitionDate||'—', branchStr, r.opening, r.additions, r.disposals, r.closing]);
       dRow.getCell(1).alignment = rtlAlign;
       dRow.getCell(2).alignment = cenAlign;
-      [3,4,5,6].forEach(i => { dRow.getCell(i).numFmt = numFmt; dRow.getCell(i).alignment = numAlign; });
+      dRow.getCell(3).alignment = rtlAlign;
+      [4,5,6,7].forEach(i => { dRow.getCell(i).numFmt = numFmt; dRow.getCell(i).alignment = numAlign; });
       if (idx % 2 === 1) {
         const altFill = { type:'pattern', pattern:'solid', fgColor:{ argb:CLR.bluePale } };
-        [1,2,3,4,5,6].forEach(i => { dRow.getCell(i).fill = altFill; });
+        [1,2,3,4,5,6,7].forEach(i => { dRow.getCell(i).fill = altFill; });
       }
     });
   });
 
-  const gtRow = ws.addRow(['الإجمالي الكلي', '', totOpen, totAdd, totDisp, totClose]);
-  ws.mergeCells(`A${gtRow.number}:B${gtRow.number}`);
+  const gtRow = ws.addRow(['الإجمالي الكلي', '', '', totOpen, totAdd, totDisp, totClose]);
+  ws.mergeCells(`A${gtRow.number}:C${gtRow.number}`);
   gtRow.eachCell((c,i) => {
     c.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:CLR.navy } };
     c.font = { name:FONT, bold:true, color:{ argb:CLR.gold }, size:11 };
-    c.alignment = i <= 2 ? rtlAlign : numAlign;
-    if (i >= 3) c.numFmt = numFmt;
+    c.alignment = i <= 3 ? rtlAlign : numAlign;
+    if (i >= 4) c.numFmt = numFmt;
   });
 
   try {
