@@ -165,6 +165,7 @@ table.sk-tbl td.num{font-family:'Cairo',sans-serif;color:#c5d3e0}
 table.sk-tbl td.num.hi{color:#27ae60;font-weight:700}
 table.sk-tbl td.num.neg{color:#ff6b6b;font-weight:700;background:rgba(231,76,60,.12)}
 table.sk-tbl td.cat{font-size:.72rem;color:#7ab4e0;background:rgba(30,58,95,.4);border-radius:8px;padding:2px 8px;display:inline-block}
+.sk-warn{color:#f5a623;cursor:help;margin-right:4px;font-size:.85rem}
 .sk-sort-arrow{font-size:.65rem;margin-right:3px}
 .sk-no-data{padding:40px;text-align:center;color:#5a7a9a}
 .sk-tbl-footer{display:flex;justify-content:space-between;align-items:center;padding:8px 0;font-size:.78rem;color:#8a9bb5}
@@ -223,6 +224,7 @@ table.sk-tbl td.cat{font-size:.72rem;color:#7ab4e0;background:rgba(30,58,95,.4);
 </div>
 
 <div class="sk-kpis" id="sk-kpis"></div>
+<div id="sk-negrisk-note" style="display:none;padding:0 18px 6px;font-size:.76rem;color:#f5a623">⚠ = رصيد الصنف هبط تحت الصفر سابقاً — قد تكون القيمة/MAC المعروضة مشوَّهة بسبب عيب تكلفة المخزون السالب الموثّق (راجع تاب «تدقيق عيب المخزون السالب»). الأرقام معروضة كما هي من الـERP دون تعديل.</div>
 
 <div class="sk-main">
   <div style="flex:1;min-width:0">
@@ -445,6 +447,7 @@ function _skRender() {
     ${valHeader}
   </tr></thead><tbody>`;
 
+  let anyNegRisk = false;
   if (!items.length) {
     html += `<tr><td colspan="${NCOLS}" class="sk-no-data">لا توجد أصناف تطابق الفلتر</td></tr>`;
   } else {
@@ -463,9 +466,14 @@ function _skRender() {
         }).join('')
         + `<td class="num ${r.qty<0?'neg':''}">${SK_FMTQ(r.qty)}</td>`;
       }
+      const rowNegRisk = singleMode ? !!(r.byWarehouse[activeWh[0]?.id]||{}).negRisk : !!r.negRisk;
+      if (rowNegRisk) anyNegRisk = true;
+      const warnBadge = rowNegRisk
+        ? `<span class="sk-warn" title="⚠ رصيد هذا الصنف هبط تحت الصفر في وقت سابق — قيمة/MAC قد تكون مشوَّهة بسبب عيب تكلفة المخزون السالب الموثّق في تاب «تدقيق عيب المخزون السالب». الرقم المعروض كما هو من الـERP دون تعديل.">⚠</span>`
+        : '';
       html += `<tr>
         <td style="color:#8a9bb5;font-size:.75rem">${SK_ESC(r.itemCode||'')}</td>
-        <td class="col-lbl">${SK_ESC(r.nameAr)}</td>
+        <td class="col-lbl">${warnBadge}${SK_ESC(r.nameAr)}</td>
         <td><span class="cat">${SK_ESC(r.categoryName)}</span></td>
         ${qtyCells}
         <td class="num" style="color:${(r.reservedQty||0)>0?'#e67e22':'#5a7a9a'}">${SK_FMTQ(r.reservedQty||0)}</td>
@@ -497,6 +505,9 @@ function _skRender() {
 
   const body = wrap.querySelector('#sk-body');
   body.innerHTML = html;
+
+  const negRiskNote = wrap.querySelector('#sk-negrisk-note');
+  if (negRiskNote) negRiskNote.style.display = anyNegRisk ? 'block' : 'none';
 
   // Table header sort — event delegation
   if (!body._skDelegated) {

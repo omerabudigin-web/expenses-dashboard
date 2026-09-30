@@ -115,6 +115,22 @@ async function getStockData(dbName, opts = {}) {
         )
         AND sih.TransactionDate <= @asOf ${branchFilterSid}
         GROUP BY sid.Item, sid.Branch
+      ),
+      -- عيب تكلفة المخزون السالب (موثّق في negative-stock-audit.js): إذا هبط الرصيد
+      -- الجاري للصنف تحت الصفر في أي لحظة، يُنتج محرك التكلفة المرجحة بالـERP قيمة
+      -- مشوَّهة قد تبقى عالقة في الرصيد المتبقي حتى بعد عودته موجباً. علم تحذيري فقط،
+      -- لا يُعدَّل الرقم الخام.
+      RunningQty AS (
+        SELECT Item, Branch,
+               SUM(GroupQuantity) OVER (PARTITION BY Item, Branch ORDER BY TransactionDate, ID ROWS UNBOUNDED PRECEDING) AS runQty
+        FROM InventoryTransactionOnlyIncludedView
+        WHERE TransactionDate <= @asOf
+      ),
+      NegRisk AS (
+        SELECT Item, Branch
+        FROM RunningQty
+        GROUP BY Item, Branch
+        HAVING MIN(runQty) < -0.001
       )
       SELECT
         i.Id                                                          AS itemId,
@@ -137,7 +153,8 @@ async function getStockData(dbName, opts = {}) {
           ISNULL(o.v,0)+ISNULL(rc.v,0)+ISNULL(inc.v,0)
           +ISNULL(d.v,0)+ISNULL(dec.v,0)
           +ISNULL(tri.v,0)+ISNULL(tro.v,0)
-        ) / NULLIF(oh.onHand, 0), 4)                                 AS mac
+        ) / NULLIF(oh.onHand, 0), 4)                                 AS mac,
+        CASE WHEN nr.Item IS NOT NULL THEN 1 ELSE 0 END               AS negRisk
       FROM OnHand oh
       JOIN Item i          ON i.Id  = oh.Item
       JOIN ItemCategory ic  ON ic.ID = i.Category
@@ -154,6 +171,7 @@ async function getStockData(dbName, opts = {}) {
       LEFT JOIN TrOut     tro  ON tro.Item = oh.Item AND tro.Branch = oh.Branch
       LEFT JOIN TrIn      tri  ON tri.Item = oh.Item AND tri.Branch = oh.Branch
       LEFT JOIN Reserved  res  ON res.Item = oh.Item AND res.Branch = oh.Branch
+      LEFT JOIN NegRisk   nr   ON nr.Item = oh.Item AND nr.Branch = oh.Branch
       ORDER BY i.Id, oh.Branch
     `),
     pool.request().input('asOf', sql.Date, asOf).query(`
@@ -179,7 +197,7 @@ async function getStockData(dbName, opts = {}) {
         mainCategory: (r.mainCategory || '').trim(),
         unitName:     (r.unitName || '').trim(),
         qty: 0, reservedQty: 0, availableQty: 0, value: 0,
-        byWarehouse: {},
+        byWarehouse: {}, negRisk: false,
       });
     }
     const item = itemsMap.get(itemId);
@@ -188,16 +206,18 @@ async function getStockData(dbName, opts = {}) {
     const availableQty= +r.availableQty;
     const value        = +r.value;
     const mac          = +r.mac || 0;
+    const negRisk       = !!r.negRisk;
 
     item.byWarehouse[r.branchId] = {
       warehouseId: r.branchId,
       warehouseName: (r.branchName || '').trim(),
-      qty, reservedQty, availableQty, value, mac,
+      qty, reservedQty, availableQty, value, mac, negRisk,
     };
     item.qty         += qty;
     item.reservedQty  += reservedQty;
     item.availableQty += availableQty;
     item.value        += value;
+    item.negRisk       = item.negRisk || negRisk;
   }
 
   let items = [...itemsMap.values()].map(item => ({
