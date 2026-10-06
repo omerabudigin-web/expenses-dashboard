@@ -22,6 +22,8 @@ const EA_CHARTS = {}; // canvas-id → Chart instance
 const EA_FIN_CODE = '4020118003'; // مصروفات فوائد بنكية — الحساب الوحيد المطابق لـ"تمويلي" في الدليلين
 let _eaBudgets   = null;   // { source, generatedAt, branches: { [branchId]: { [code]: {name, amount} } } }
 let _eaDeriving  = false;
+let _eaLedger    = null;   // دفتر المصروفات المسطّح (فرع × حساب × شهر) — مصدر جدول مقارنة الفروع
+let _eaBranchList = [];    // [{id, name}] من /api/branches — لأسماء أعمدة الفروع
 
 function _eaIsActive() { return !!document.querySelector('.tab.active[data-tab="expense-analysis"]'); }
 function _eaStopAuto()  { if (_eaAutoTimer) { clearInterval(_eaAutoTimer); _eaAutoTimer = null; } }
@@ -91,6 +93,11 @@ function initExpenseAnalysis() {
     if (_eaData) { _eaExpanded = _eaDefaultExpand(_eaData); _eaRenderTree(); }
   });
   document.getElementById('ea-search').addEventListener('input', _eaRenderTree);
+  // تغيير مستوى التجميع/إظهار النسبة = إعادة رسم محلية فقط، بلا إعادة جلب
+  ['ea-br-level', 'ea-br-pct'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('change', () => { if (_eaLedger) _eaRenderBranchTable(); });
+  });
   const cmpCb = document.getElementById('ea-compare');
   if (cmpCb) cmpCb.addEventListener('change', () => { _eaCmpData = null; if (_eaData) fetchExpenseAnalysis(); });
 
@@ -221,6 +228,7 @@ async function _eaPopulateBranches() {
   const prev = sel.value;
   try {
     const list = await fetch(`/api/branches?db=${encodeURIComponent(db)}`).then(r => r.json());
+    _eaBranchList = Array.isArray(list) ? list : [];
     while (sel.options.length > 0) sel.remove(0);
     const all = document.createElement('option'); all.value = 'ALL'; all.textContent = 'جميع الفروع'; sel.appendChild(all);
     list.filter(b => b.id !== 0).forEach(b => {
@@ -385,13 +393,19 @@ async function fetchExpenseAnalysis() {
   statusEl.textContent = 'جارٍ التحميل…';
   document.getElementById('ea-tbody').innerHTML = '';
 
+  // جدول مقارنة الفروع يعرض كل الفروع دائماً بصرف النظر عن فلتر ea-branch أعلاه،
+  // فالمقارنة نفسها هي الغرض — لذلك لا يُمرَّر branch هنا (ومسار ledger لا يقبله أصلاً).
+  const ledgerQs = new URLSearchParams({ db, mode: 'ledger', from: fromDate, to: toDate });
+
   try {
-    const [resp, cmpRows] = await Promise.all([
+    const [resp, cmpRows, ledgerRows] = await Promise.all([
       fetch(`/api/trial-balance?${qs}`).then(r => r.ok ? r.json() : r.json().then(e => { throw new Error(e.error); })),
       wantCmp
         ? fetch(`/api/trial-balance?${cmpQs}`).then(r => r.ok ? r.json() : Promise.resolve(null))
         : Promise.resolve(null),
+      fetch(`/api/trial-balance?${ledgerQs}`).then(r => r.ok ? r.json() : Promise.resolve(null)).catch(() => null),
     ]);
+    _eaLedger = Array.isArray(ledgerRows) ? ledgerRows : null;
     const cogsSplit    = _eaSplitCogs(resp);
     const cogsCmpSplit = cmpRows ? _eaSplitCogs(cmpRows) : { treeData: null, cogsNode: null };
     const finSplit      = _eaSplitFinance(cogsSplit.treeData);
@@ -421,6 +435,7 @@ function _eaRenderAll() {
   _eaRenderKPIs();
   _eaRenderTree();
   _eaRenderCharts();
+  _eaRenderBranchTable();
   _eaRenderBudgetTable();
 }
 
@@ -826,6 +841,145 @@ function _eaRenderParetoChart() {
   });
 }
 
+// ── مقارنة المصروفات حسب الفروع ────────────────────────────────────────────────
+// المصدر: /api/trial-balance?mode=ledger — صف لكل (فرع × حساب × شهر). اختير على
+// استدعاء الشجرة مرة لكل فرع لسببين: (1) معامل branch في مسار الشجرة يعامل 0
+// كـ"الكل" فلا يمكن عزل حركة "بدون فرع" عبره إطلاقاً، بينما الدفتر يُرجع
+// ISNULL(jd.Branch,0) كقيمة مستقلة؛ (2) طلب واحد بدل N.
+//
+// مهم: فلتر الدفتر الداخلي لتكلفة البضاعة (Category<>37 + نمط الاسم) لا يطابق
+// قاعدة هذا التاب (بادئة الكود 4010101). تحقّق حي على MekSoftDb1 للفترة
+// 2026-01→2026-09: الدفتر بفلتره وحده يترك 270,621.63 ر.س من صفوف كودها يبدأ
+// بـ4010101، فلا يطابق الشجرة. بعد تطبيق استبعادَي هذا التاب (بادئة 4010101
+// للتكلفة + الحساب المفرد 4020118003 للتمويل) صار الطرفان 6,928,657.85 ر.س
+// بفارق 0.00 — لذا الاستبعادان أدناه إلزاميان لا تجميليان.
+const EA_COGS_PREFIX = '4010101';
+
+function _eaBranchName(id) {
+  const b = _eaBranchList.find(x => +x.id === +id);
+  if (b && b.name) return String(b.name).trim();
+  if (BRANCH_LABEL[id]) return BRANCH_LABEL[id];
+  return `فرع ${id}`;
+}
+
+function _eaLedgerExpenseRows() {
+  if (!_eaLedger) return [];
+  return _eaLedger.filter(r => r.code && !r.code.startsWith(EA_COGS_PREFIX) && r.code !== EA_FIN_CODE);
+}
+
+// التجميع ببادئة الكود لا بـlevelNo: شجرة الدليل غير منتظمة — تحقّق حي أن
+// 40102/40103 (بيعية وتسويقية، ومشتريات) تجلس كأبناء هيكليين تحت 4010101 فتظهر
+// بـlevelNo=5 بجوار حسابات تفصيلية رغم أنها مجموعات رئيسية. البادئة تُرجعها
+// لموضعها الصحيح، وهي نفس القاعدة التي يعتمدها فصل تكلفة البضاعة في هذا التاب.
+function _eaGroupKey(code, prefixLen) {
+  if (!prefixLen) return code;
+  return code.length <= prefixLen ? code : code.slice(0, prefixLen);
+}
+
+function _eaRenderBranchTable() {
+  const wrap = document.getElementById('ea-branch-wrap');
+  if (!wrap) return;
+  const statusEl = document.getElementById('ea-br-status');
+
+  const rows = _eaLedgerExpenseRows();
+  if (!rows.length) {
+    wrap.innerHTML = `<div class="ea-br-empty">${_eaLedger ? 'لا حركة مصروفات على أي فرع في هذه الفترة' : 'تعذّر تحميل دفتر المصروفات — اضغط «عرض التحليل» لإعادة المحاولة'}</div>`;
+    if (statusEl) statusEl.textContent = '';
+    return;
+  }
+
+  const prefixLen = parseInt((document.getElementById('ea-br-level') || {}).value, 10) || 0;
+  const showPct   = !!(document.getElementById('ea-br-pct') || {}).checked;
+
+  const nameOf = new Map();
+  (_eaData || []).forEach(r => nameOf.set(r.code, r.name));
+  rows.forEach(r => { if (!nameOf.has(r.code)) nameOf.set(r.code, r.name); });
+
+  // تجميع: مفتاح المجموعة × الفرع
+  const branchIds = [...new Set(rows.map(r => +r.branch))].sort((a, b) => a - b);
+  const groups = new Map();
+  rows.forEach(r => {
+    const key = _eaGroupKey(r.code, prefixLen);
+    if (!groups.has(key)) groups.set(key, { key, name: nameOf.get(key) || r.name || key, byBranch: {}, total: 0 });
+    const g = groups.get(key);
+    g.byBranch[r.branch] = (g.byBranch[r.branch] || 0) + r.net;
+    g.total += r.net;
+  });
+
+  const list = [...groups.values()]
+    .filter(g => Math.abs(g.total) > 0.004 || branchIds.some(b => Math.abs(g.byBranch[b] || 0) > 0.004))
+    .sort((a, b) => Math.abs(b.total) - Math.abs(a.total));
+
+  const brTotals = {};
+  branchIds.forEach(b => { brTotals[b] = list.reduce((s, g) => s + (g.byBranch[b] || 0), 0); });
+  const grand = list.reduce((s, g) => s + g.total, 0);
+
+  // عمود الفرع المختار في الفلتر العلوي يُبرَز فقط — الجدول لا يُفلتر به
+  const brSelVal = (document.getElementById('ea-branch') || {}).value;
+  const highlight = (brSelVal && brSelVal !== 'ALL') ? +brSelVal : null;
+
+  const pctOfGrand = v => (Math.abs(grand) > 0.004 ? v / grand * 100 : 0);
+
+  const head = `<tr>
+      <th>البند</th>
+      ${branchIds.map(b => `<th class="num${b === highlight ? ' ea-br-hl' : ''}">${esc(_eaBranchName(b))}</th>`).join('')}
+      <th class="num">الإجمالي</th>
+      <th class="num">% من الإجمالي</th>
+    </tr>`;
+
+  const body = list.map(g => {
+    const cells = branchIds.map(b => {
+      const v = g.byBranch[b] || 0;
+      const cls = `num${b === highlight ? ' ea-br-hl' : ''}${Math.abs(v) < 0.004 ? ' ea-zero' : ''}`;
+      const sub = showPct && Math.abs(g.total) > 0.004 && Math.abs(v) > 0.004
+        ? `<span class="ea-br-sub">${fmt(v / g.total * 100, 1)}%</span>` : '';
+      return `<td class="${cls}">${Math.abs(v) < 0.004 ? '—' : fmt(v, 0)}${sub}</td>`;
+    }).join('');
+    return `<tr>
+      <td class="ea-br-name" title="${esc(g.key)}">${esc(g.name)}</td>
+      ${cells}
+      <td class="num ea-br-total">${fmt(g.total, 0)}</td>
+      <td class="num">${fmt(pctOfGrand(g.total), 1)}%</td>
+    </tr>`;
+  }).join('');
+
+  const totalRow = `<tr class="ea-br-grand">
+      <td>الإجمالي</td>
+      ${branchIds.map(b => `<td class="num${b === highlight ? ' ea-br-hl' : ''}">${fmt(brTotals[b], 0)}<span class="ea-br-sub">${fmt(pctOfGrand(brTotals[b]), 1)}%</span></td>`).join('')}
+      <td class="num ea-br-total">${fmt(grand, 0)}</td>
+      <td class="num">100.0%</td>
+    </tr>`;
+
+  wrap.innerHTML = `
+    <div class="ea-table-wrap">
+      <table class="ea-branch-tbl">
+        <thead>${head}</thead>
+        <tbody>${body}${totalRow}</tbody>
+      </table>
+    </div>
+    <div class="ea-footnote">صافي حركة الفترة (مدين−دائن) لكل بند على كل فرع، بعد استبعاد تكلفة البضاعة المباعة والتكاليف التمويلية — نفس أساس بقية التاب. هذا الجدول يعرض كل الفروع دائماً ولا يتأثر بفلتر «الفرع» أعلاه (الفرع المختار يُبرَز بلون مختلف فقط).</div>`;
+
+  // تحقّق ذاتي وقت التشغيل: يُقارَن فقط حين يكون الفلتر "جميع الفروع"، لأن
+  // _eaData حينها فقط يغطي نفس نطاق الدفتر (الخادم يُصفّي الشجرة بالفرع).
+  if (statusEl) {
+    let note = `${list.length} بند · ${branchIds.length} فرع · الإجمالي ${fmt(grand, 0)} ر.س`;
+    if (!highlight && _eaData && _eaData.length) {
+      const childOf = _eaBuildChildIndex(_eaData);
+      const treeTotal = _eaData
+        .filter(r => !(childOf.get(r.id) || []).length)
+        .reduce((s, r) => s + (r.pDebit - r.pCredit), 0);
+      const diff = grand - treeTotal;
+      note += Math.abs(diff) <= 0.01
+        ? ' ✓ مطابق لإجمالي المصروفات أعلاه'
+        : ` ⚠️ فرق ${fmt(diff, 2)} ر.س عن إجمالي المصروفات أعلاه (${fmt(treeTotal, 0)}) — لا تعتمد الجدول قبل فحص السبب`;
+      statusEl.style.color = Math.abs(diff) <= 0.01 ? '#4ada8e' : '#e0a050';
+    } else {
+      statusEl.style.color = '#7090b0';
+    }
+    statusEl.textContent = note;
+  }
+}
+
 // ── الفعلي مقابل الموازنة ─────────────────────────────────────────────────────
 // يستخدم _eaData (بعد فصل COGS والتمويل) المُصفّى مسبقاً بالفرع المختار في
 // ea-branch (الفلترة تمت في الخادم عبر ?branch=). المبلغ الفعلي هنا هو صافي
@@ -1079,6 +1233,27 @@ function _eaInjectCSS() {
 .ea-budget-tbl td { padding:5px 10px; border-bottom:1px solid #12233a; color:#c8d8e8; }
 .ea-nobudget { color:#3a5a7a; font-size:.72rem; }
 .ea-footnote { font-size:.68rem; color:#4a6a8a; padding:8px 2px; }
+
+.ea-branch-bar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:8px; }
+.ea-branch-bar label { color:#5a80a0; font-size:.78rem; }
+.ea-branch-bar select {
+  background:#0f2035; border:1px solid #1e3a5f; color:#c8d8e8; padding:5px 9px; border-radius:6px; font-size:.78rem;
+}
+.ea-br-chk { display:flex; align-items:center; gap:5px; cursor:pointer; }
+.ea-br-chk input { accent-color:#5baef0; cursor:pointer; }
+#ea-br-status { font-size:.74rem; color:#7090b0; }
+.ea-branch-tbl { width:100%; border-collapse:collapse; font-size:.8rem; }
+.ea-branch-tbl thead th { background:#0d1e30; color:#8aacca; padding:7px 10px; text-align:right; position:sticky; top:0; white-space:nowrap; }
+.ea-branch-tbl th.num, .ea-branch-tbl td.num { text-align:left; }
+.ea-branch-tbl td { padding:5px 10px; border-bottom:1px solid #12233a; color:#c8d8e8; white-space:nowrap; }
+.ea-branch-tbl tbody tr:hover td { background:#0f2238; }
+.ea-br-name { text-align:right; white-space:normal; min-width:180px; }
+.ea-br-total { color:#c8e8ff; font-weight:700; }
+.ea-br-hl { background:#10263f; }
+.ea-br-sub { display:block; font-size:.66rem; color:#5a80a0; margin-top:1px; }
+.ea-branch-tbl tr.ea-br-grand td { background:#0d1e30; font-weight:700; color:#C9A84C; border-top:2px solid #1e3a5f; }
+.ea-branch-tbl tr.ea-br-grand td.ea-br-hl { background:#14283f; }
+.ea-br-empty { background:#0a1828; border:1px solid #1e3a5f; border-radius:8px; padding:20px; text-align:center; color:#3a5a7a; font-size:.8rem; }
 #ea-ytd-note { display:none; font-size:.72rem; color:#e0a050; background:#241a08; border:1px solid #4a3a10; border-radius:6px; padding:6px 10px; margin:6px 0; }
 #ea-pareto-note { font-size:.7rem; color:#7090b0; margin-top:6px; }
 `;

@@ -1177,6 +1177,20 @@
     </div>
   </div>
 
+  <div class="ea-section-title">🏢 مقارنة المصروفات حسب الفروع</div>
+  <div class="ea-branch-bar">
+    <label for="ea-br-level">مستوى التجميع:</label>
+    <select id="ea-br-level">
+      <option value="3">رئيسي — تشغيلية / إدارية</option>
+      <option value="5">مجموعة</option>
+      <option value="7" selected>تفصيلي</option>
+      <option value="0">كل البنود</option>
+    </select>
+    <label class="ea-br-chk"><input type="checkbox" id="ea-br-pct"> نسبة كل فرع داخل البند</label>
+    <span id="ea-br-status"></span>
+  </div>
+  <div id="ea-branch-wrap"></div>
+
   <div class="ea-section-title">💰 الفعلي مقابل الموازنة</div>
   <div class="ea-budget-bar">
     <button class="ea-btn" id="ea-derive-budget">🔄 إعادة اشتقاق من المتوسط</button>
