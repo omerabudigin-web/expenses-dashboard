@@ -40,7 +40,10 @@ function catToSqlClause(cat) {
     adm:  `(ac.Code LIKE '4020106%' OR ac.Code LIKE '4020107%' OR ac.Code LIKE '4020108%' OR ac.Code LIKE '4020111%')`,
     char: `ac.Code LIKE '4020115%'`,
     fin:  `ac.Code LIKE '4020118%'`,
-    oth:  `ac.Code LIKE '4020117%'`,
+    // 4020114% (هدايا ومكافآت) أُضيف هنا — كان مستبعداً صامتاً من كل تجميع شهري/فرعي
+    // رغم وقوعه ضمن BASE_WHERE، لأن catFromCode() يُصنّفه 'oth' افتراضياً بينما
+    // SQL هنا كانت تطابق 4020117% فقط. أول ظهور حي للفارق: MekSoftDb4، 3,000 ر.س.
+    oth:  `(ac.Code LIKE '4020117%' OR ac.Code LIKE '4020114%')`,
   };
   return map[cat] || null;
 }
@@ -84,7 +87,8 @@ async function getMonthly(dbName, startDate) {
                       OR ac.Code LIKE '4020111%' THEN (jd.Debit - jd.Credit) ELSE 0 END) AS adm,
         SUM(CASE WHEN ac.Code LIKE '4020115%'   THEN (jd.Debit - jd.Credit) ELSE 0 END) AS char_,
         SUM(CASE WHEN ac.Code LIKE '4020118%'   THEN (jd.Debit - jd.Credit) ELSE 0 END) AS fin,
-        SUM(CASE WHEN ac.Code LIKE '4020117%'   THEN (jd.Debit - jd.Credit) ELSE 0 END) AS oth
+        SUM(CASE WHEN ac.Code LIKE '4020117%'
+                      OR ac.Code LIKE '4020114%' THEN (jd.Debit - jd.Credit) ELSE 0 END) AS oth
       FROM JournalVoucherHeader h
       JOIN JournalVoucherDetail jd ON jd.HeaderID = h.ID
       JOIN AccountChart         ac ON ac.ID = jd.AccountChart
@@ -125,7 +129,8 @@ async function getBranches(dbName, startDate) {
                       OR ac.Code LIKE '4020111%' THEN (jd.Debit - jd.Credit) ELSE 0 END) AS adm,
         SUM(CASE WHEN ac.Code LIKE '4020115%'   THEN (jd.Debit - jd.Credit) ELSE 0 END) AS char_,
         SUM(CASE WHEN ac.Code LIKE '4020118%'   THEN (jd.Debit - jd.Credit) ELSE 0 END) AS fin,
-        SUM(CASE WHEN ac.Code LIKE '4020117%'   THEN (jd.Debit - jd.Credit) ELSE 0 END) AS oth
+        SUM(CASE WHEN ac.Code LIKE '4020117%'
+                      OR ac.Code LIKE '4020114%' THEN (jd.Debit - jd.Credit) ELSE 0 END) AS oth
       FROM JournalVoucherHeader h
       JOIN JournalVoucherDetail jd ON jd.HeaderID = h.ID
       JOIN AccountChart         ac ON ac.ID = jd.AccountChart
